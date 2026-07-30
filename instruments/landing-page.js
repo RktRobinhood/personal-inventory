@@ -30,11 +30,6 @@ export function mountLanding(doc = document) {
       ? `${completed} of ${instrumentCards.length} lenses complete`
       : 'No results yet';
   }
-  for (const avatar of doc.querySelectorAll('.pi-portrait-avatar')) {
-    const progress = instrumentCards.length ? completed / instrumentCards.length : 0;
-    avatar.style.setProperty('--pi-portrait-progress', `${Math.round(progress * 360)}deg`);
-  }
-
   const status = doc.querySelector('[data-library-status]');
   if (status) {
     const count = library.state.records.length;

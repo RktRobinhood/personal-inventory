@@ -2,16 +2,16 @@
   "id": "cognitive-ability",
   "version": "2.0.0",
   "title": "Figural Reasoning",
-  "source": "Open Matrices Item Bank (OMIB), complete 220-item bank. Item codes, solutions, and published 2PL parameters come from the authors? Item Data workbook; the one misfitting item is retained for provenance but excluded from scored forms.",
+  "source": "Open Matrices Item Bank (OMIB), complete 220-item bank. Item codes, solutions, and published 2PL parameters come from the authors' Item Data workbook; the one misfitting item is retained for provenance but excluded from scored forms.",
   "citation": "Koch, M., Spinath, F. M., Greiff, S., & Becker, N. (2022). Development and Validation of the Open Matrices Item Bank. Journal of Intelligence, 10(3), 41. https://doi.org/10.3390/jintelligence10030041",
   "license": "GPL-3.0 (OMIB item bank and reference web implementation). Source materials: https://osf.io/4km79/",
-  "intro": "Two practice puzzles and twenty-eight scored visual problems ask you to infer rules and construct a missing tile. Each sitting draws a new balanced form from the complete 220-item OMIB bank. This is a research-backed snapshot of figural reasoning?not a full IQ test, diagnosis, or fixed measure of potential.",
+  "intro": "Two practice puzzles and twenty-eight scored visual problems ask you to infer rules and construct a missing tile. Each sitting draws a new balanced form from the complete 220-item OMIB bank. This is a research-backed snapshot of figural reasoning—not a full IQ test, diagnosis, or fixed measure of potential.",
   "sections": [
     {
       "type": "info",
       "id": "intro",
       "title": "Set yourself up fairly",
-      "body": "Allow about 25?35 uninterrupted minutes. The standard assessment is untimed, matching the published validation conditions; elapsed working time is recorded only as context. Work independently and use no outside help. Two practice puzzles provide feedback before the scored form begins.\n\nThe calibrated items are scientifically useful, but this self-administered form has no age-specific Danish norms and does not produce a defensible IQ number. Vision, attention, fatigue, prior matrix experience, practice effects, device size, and interruptions can all affect performance. Treat the result as a baseline for reflection, never as a label or selection decision."
+      "body": "Allow about 25–35 uninterrupted minutes. The standard assessment is untimed, matching the published validation conditions; elapsed working time is recorded only as context. Work independently and use no outside help. Two practice puzzles provide feedback before the scored form begins.\n\nThe calibrated items are scientifically useful, but this self-administered form has no age-specific Danish norms and does not produce a defensible IQ number. Vision, attention, fatigue, prior matrix experience, practice effects, device size, and interruptions can all affect performance. Treat the result as a baseline for reflection, never as a label or selection decision."
     },
     {
       "type": "scored-matrix",

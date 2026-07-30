@@ -12,7 +12,11 @@ export function createMatrixForm(section, options = {}) {
   const length = Math.min(config.length || 28, eligibleItems.length);
   const seed = String(options.seed || 'personal-inventory');
   const random = seededRandom(seed);
-  const excluded = new Set(options.excludeIds || []);
+  const exposureCounts = options.exposureCounts || {};
+  const excluded = new Set([
+    ...(options.excludeIds || []),
+    ...Object.keys(exposureCounts).filter((id) => Number(exposureCounts[id]) > 0),
+  ]);
   const targets = normalizedTargets(config.rule_targets, length);
   const selected = [];
 
@@ -20,11 +24,13 @@ export function createMatrixForm(section, options = {}) {
     const rules = Number(ruleText);
     const group = eligibleItems.filter((item) => item.rules === rules);
     const fresh = group.filter((item) => !excluded.has(item.id));
-    const old = group.filter((item) => excluded.has(item.id));
+    const old = group
+      .filter((item) => excluded.has(item.id))
+      .sort((a, b) => exposureFor(a) - exposureFor(b));
     selected.push(...difficultySample(fresh, Math.min(target, fresh.length), random));
     if (selected.filter((item) => item.rules === rules).length < target) {
       const used = new Set(selected.map((item) => item.id));
-      const fallback = old.filter((item) => !used.has(item.id));
+      const fallback = leastExposed(old.filter((item) => !used.has(item.id)));
       const needed = target - selected.filter((item) => item.rules === rules).length;
       selected.push(...difficultySample(fallback, needed, random));
     }
@@ -42,7 +48,7 @@ export function createMatrixForm(section, options = {}) {
   if (selected.length < length) {
     const used = new Set(selected.map((item) => item.id));
     selected.push(...difficultySample(
-      eligibleItems.filter((item) => !used.has(item.id)),
+      leastExposed(eligibleItems.filter((item) => !used.has(item.id))),
       length - selected.length,
       random,
     ));
@@ -70,6 +76,16 @@ export function createMatrixForm(section, options = {}) {
     eligibleSize: eligibleItems.length,
     reused: items.filter((item) => excluded.has(item.id)).length,
   };
+
+  function exposureFor(item) {
+    return Number(exposureCounts[item.id]) || (excluded.has(item.id) ? 1 : 0);
+  }
+
+  function leastExposed(items) {
+    if (!items.length) return items;
+    const minimum = Math.min(...items.map(exposureFor));
+    return items.filter((item) => exposureFor(item) === minimum);
+  }
 }
 
 export function randomSeed(cryptoApi = globalThis.crypto) {

@@ -64,9 +64,7 @@ const SAMPLE_RECORDS = [
     variant: 'full', raw_responses: { commit: ['open-minded'] }, scores: {}, bands: {}, readout: [], student_snapshot: 'My commitment for the year.' },
   { instrument_id: 'cognitive-ability', instrument_version: '2.0.0', timestamp: '2026-08-20T10:00:00Z',
     variant: 'full', raw_responses: { 'omib-3': '00001010000000000000' },
-    scores: { 'figural-reasoning': 0.314 }, bands: { 'figural-reasoning': 'middle-range' },
-    readout: [{ scale: 'figural-reasoning', scale_name: 'Figural Reasoning', band: 'middle-range',
-      construct_explainer: 'x', light: 'a', shadow: 'b', one_thing_to_try: 'c' }],
+    scores: { 'figural-reasoning': 0.314 }, bands: {}, readout: [],
     student_snapshot: '',
     administration: { mode: 'standard-untimed', form_seed: 'fixture', bank_size: 220,
       form_length: 28, elapsed_seconds: 1440, interruptions: 1, skipped_items: [],
@@ -431,8 +429,34 @@ await gate('matrix:forms', async () => {
   const next = createMatrixForm(section, { seed: 'fresh-form', excludeIds: ids });
   const overlap = next.section.items.filter((item) => ids.includes(item.id)).length;
   if (overlap !== 0) fail(`fresh form reused ${overlap} item(s) before necessary`);
+  const exposureCounts = Object.fromEntries(section.items.map((item) => [item.id, 1]));
+  for (const id of ids) exposureCounts[id] = 20;
+  const leastExposed = createMatrixForm(section, { seed: 'repeatable-form', exposureCounts });
+  const overexposed = leastExposed.section.items.filter((item) => ids.includes(item.id)).length;
+  if (overexposed !== 0) fail(`least-exposed fallback selected ${overexposed} overexposed item(s)`);
   if (first.paletteOrder.some((value, index) => value !== index)) {
     fail('validated construction palette order was changed');
+  }
+
+  const { createMatrixDraft, normalizeMatrixDraft } =
+    await import(pathToFileURL(p('engine', 'matrix-draft.js')).href);
+  const draftValue = createMatrixDraft({
+    definition,
+    form: first,
+    answers: { [ids[0]]: first.section.items[0].solution },
+    skipped: [],
+    current: 1,
+    elapsedMs: 65432,
+    interruptions: 2,
+  });
+  const restoredDraft = normalizeMatrixDraft(draftValue, definition, section);
+  if (!restoredDraft || restoredDraft.current !== 1 ||
+      restoredDraft.item_order.join('|') !== ids.join('|') ||
+      restoredDraft.elapsed_ms !== 65432) {
+    fail('matrix checkpoint did not validate and round-trip');
+  }
+  if (normalizeMatrixDraft({ ...draftValue, instrument_version: 'stale' }, definition, section)) {
+    fail('stale matrix checkpoint was accepted');
   }
 
   const correct = Object.fromEntries(first.section.items.map((item) => [item.id, item.solution]));

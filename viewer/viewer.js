@@ -49,6 +49,7 @@ export function aggregateRecords(records) {
           instrument_version: r.instrument_version,
           administration_mode: r.administration?.mode || 'legacy',
           metric: r.administration?.theta != null ? 'theta' : 'raw',
+          standard_error: r.administration?.theta_standard_error,
         });
       }
       if (typeof r.student_snapshot === 'string' && r.student_snapshot.trim() !== '') {

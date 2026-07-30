@@ -102,7 +102,6 @@ button, input, textarea { font: inherit; }
   transform: translateY(-1px);
 }
 .pi-portrait-avatar {
-  --pi-portrait-progress: 0deg;
   position: relative;
   width: 2.35rem;
   height: 2.35rem;
@@ -110,7 +109,7 @@ button, input, textarea { font: inherit; }
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: conic-gradient(var(--pi-sun) var(--pi-portrait-progress), rgba(24,92,75,.13) 0);
+  background: rgba(24,92,75,.13);
 }
 .pi-portrait-avatar::before {
   position: absolute;
@@ -904,6 +903,7 @@ fieldset.pi-item legend::before {
 .pi-band--balanced { background: #f5e9c6; color: #775d20; }
 .pi-band--high { background: #dcece4; color: #27664c; }
 .pi-band--unknown { background: #e8e7e2; color: var(--pi-muted); }
+.pi-band--theta { min-width: 7.5rem; background: #dcece8; color: #165e50; text-transform: none; }
 .pi-delta { min-width: 2.2rem; color: var(--pi-accent); font-size: .75rem; font-weight: 800; text-align: right; }
 .pi-sparkline { width: 7rem; height: 2.3rem; overflow: visible; }
 .pi-sparkline polyline { stroke: var(--pi-accent-2); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
@@ -998,7 +998,7 @@ fieldset.pi-item legend::before {
 }
 .pi-assessment-card:hover::after { opacity: 1; }
 .pi-assessment-card.is-complete { border-color: #76a58f; }
-.pi-assessment-card.is-complete .pi-card__number { padding-top: 2rem; }
+.pi-card__number { margin-top: 2rem; }
 .pi-card__state {
   position: absolute;
   z-index: 2;
@@ -1266,6 +1266,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .pi-exam-rules p { margin: .25rem 0 0; color: #91aca2; font-size: .82rem; }
 .pi-exam-start { display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; }
 .pi-exam-start p { max-width: 40rem; color: #a8c0b7; }
+.pi-exam-resume { display: grid; justify-items: end; gap: .55rem; }
+.pi-exam-resume .pi-hint { margin: 0; font-size: .72rem; text-align: right; }
 .pi-btn--large { padding: 1rem 1.5rem; font-size: 1rem; }
 
 .pi-exam-shell {
@@ -1439,6 +1441,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .pi-exam-specs { grid-template-columns: repeat(2, 1fr); }
   .pi-exam-rules { grid-template-columns: 1fr; }
   .pi-exam-start { align-items: stretch; flex-direction: column; }
+  .pi-exam-resume { justify-items: stretch; }
+  .pi-exam-resume .pi-hint { text-align: left; }
   .pi-exam-shell { border-radius: 20px; }
   .pi-exam-workbench { grid-template-columns: 1fr; }
   .pi-exam-puzzle, .pi-exam-construction { padding: .8rem; }

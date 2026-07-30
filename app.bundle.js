@@ -261,7 +261,11 @@ function createMatrixForm(section, options = {}) {
   const length = Math.min(config.length || 28, eligibleItems.length);
   const seed = String(options.seed || 'personal-inventory');
   const random = seededRandom(seed);
-  const excluded = new Set(options.excludeIds || []);
+  const exposureCounts = options.exposureCounts || {};
+  const excluded = new Set([
+    ...(options.excludeIds || []),
+    ...Object.keys(exposureCounts).filter((id) => Number(exposureCounts[id]) > 0),
+  ]);
   const targets = normalizedTargets(config.rule_targets, length);
   const selected = [];
 
@@ -269,11 +273,13 @@ function createMatrixForm(section, options = {}) {
     const rules = Number(ruleText);
     const group = eligibleItems.filter((item) => item.rules === rules);
     const fresh = group.filter((item) => !excluded.has(item.id));
-    const old = group.filter((item) => excluded.has(item.id));
+    const old = group
+      .filter((item) => excluded.has(item.id))
+      .sort((a, b) => exposureFor(a) - exposureFor(b));
     selected.push(...difficultySample(fresh, Math.min(target, fresh.length), random));
     if (selected.filter((item) => item.rules === rules).length < target) {
       const used = new Set(selected.map((item) => item.id));
-      const fallback = old.filter((item) => !used.has(item.id));
+      const fallback = leastExposed(old.filter((item) => !used.has(item.id)));
       const needed = target - selected.filter((item) => item.rules === rules).length;
       selected.push(...difficultySample(fallback, needed, random));
     }
@@ -291,7 +297,7 @@ function createMatrixForm(section, options = {}) {
   if (selected.length < length) {
     const used = new Set(selected.map((item) => item.id));
     selected.push(...difficultySample(
-      eligibleItems.filter((item) => !used.has(item.id)),
+      leastExposed(eligibleItems.filter((item) => !used.has(item.id))),
       length - selected.length,
       random,
     ));
@@ -319,6 +325,16 @@ function createMatrixForm(section, options = {}) {
     eligibleSize: eligibleItems.length,
     reused: items.filter((item) => excluded.has(item.id)).length,
   };
+
+  function exposureFor(item) {
+    return Number(exposureCounts[item.id]) || (excluded.has(item.id) ? 1 : 0);
+  }
+
+  function leastExposed(items) {
+    if (!items.length) return items;
+    const minimum = Math.min(...items.map(exposureFor));
+    return items.filter((item) => exposureFor(item) === minimum);
+  }
 }
 
 function randomSeed(cryptoApi = globalThis.crypto) {
@@ -1727,16 +1743,18 @@ return { mountInstrument };
 });
 
 __def("instruments/matrix-assessment-page.js", function(__req){
-const { assembleRecord, buildReadout } = __req("engine/engine.js");
+const { assembleRecord } = __req("engine/engine.js");
 const { scoreInstrument } = __req("engine/scoring.js");
 const { drawCode, drawElement } = __req("engine/sections/scored-matrix.js");
 const { createMatrixForm, randomSeed } = __req("engine/matrix-form.js");
+const { createMatrixDraft, normalizeMatrixDraft } = __req("engine/matrix-draft.js");
 const { estimate2pl } = __req("engine/irt.js");
 const { manualDownload } = __req("engine/save-adapter.js");
 const { archiveFilename, formatBytes, loadLibrary, saveLibrary, serializeArchive, upsertRecord } = __req("engine/local-store.js");
 const { mountMotion } = __req("engine/motion.js");
 
 const EMPTY_RESPONSE = '00000000000000000000';
+const DRAFT_KEY = 'personal-inventory.matrix-draft.v2';
 
 function mountMatrixAssessment(definition, opts = {}) {
   const doc = opts.doc || document;
@@ -1747,14 +1765,31 @@ function mountMatrixAssessment(definition, opts = {}) {
   const sourceSection = definition.sections.find((section) => section.type === 'scored-matrix');
   if (!sourceSection) throw new Error('Matrix assessment has no item bank');
   const library = loadLibrary();
-  const seenIds = library.state.records
-    .filter((record) => record.instrument_id === definition.id)
-    .flatMap((record) => Object.keys(record.raw_responses || {}))
-    .filter((id) => id.startsWith('omib-'));
-  const form = createMatrixForm(sourceSection, {
+  const exposureCounts = {};
+  for (const savedRecord of library.state.records.filter((item) => item.instrument_id === definition.id)) {
+    const ids = new Set([
+      ...Object.keys(savedRecord.raw_responses || {}),
+      ...(savedRecord.administration?.item_order || []),
+    ]);
+    for (const id of ids) {
+      if (id.startsWith('omib-')) exposureCounts[id] = (exposureCounts[id] || 0) + 1;
+    }
+  }
+  const storedDraft = readDraft();
+  const draft = normalizeMatrixDraft(storedDraft, definition, sourceSection);
+  let form = createMatrixForm(sourceSection, {
     seed: randomSeed(win.crypto),
-    excludeIds: seenIds,
+    exposureCounts,
   });
+  if (draft) {
+    const byId = new Map(sourceSection.items.map((item) => [item.id, item]));
+    form = {
+      ...form,
+      seed: draft.seed,
+      reused: draft.reused,
+      section: { ...sourceSection, items: draft.item_order.map((id) => byId.get(id)) },
+    };
+  }
   const formDefinition = {
     ...definition,
     sections: definition.sections.map((section) =>
@@ -1783,6 +1818,7 @@ function mountMatrixAssessment(definition, opts = {}) {
     event.returnValue = '';
   });
   win.addEventListener('pagehide', () => {
+    if (active) saveDraft();
     if (record) persistRecord();
   });
   doc.addEventListener('visibilitychange', () => {
@@ -1791,6 +1827,7 @@ function mountMatrixAssessment(definition, opts = {}) {
       accumulatedTime += Date.now() - resumedAt;
       resumedAt = 0;
       interruptions++;
+      saveDraft();
     } else {
       resumedAt = Date.now();
     }
@@ -1830,7 +1867,20 @@ function mountMatrixAssessment(definition, opts = {}) {
         el('p', {
           text: 'Choose a quiet moment. Elapsed time pauses when this page is hidden and is recorded only as context.',
         }),
-        button('Start guided practice', 'pi-btn pi-btn--primary pi-btn--large', startPractice),
+        draft
+          ? el('div', { class: 'pi-exam-resume' }, [
+            button(
+              `Resume puzzle ${draft.current + 1} of ${form.section.items.length}`,
+              'pi-btn pi-btn--primary pi-btn--large',
+              resumeDraft,
+            ),
+            button('Discard saved sitting and start fresh', 'pi-btn pi-btn--quiet', discardDraft),
+            el('p', {
+              class: 'pi-hint',
+              text: `Checkpoint saved ${draft.saved_at ? new Date(draft.saved_at).toLocaleString() : 'in this browser'}.`,
+            }),
+          ])
+          : button('Start guided practice', 'pi-btn pi-btn--primary pi-btn--large', startPractice),
       ]),
     ]);
     root.append(hero, briefing);
@@ -1845,13 +1895,33 @@ function mountMatrixAssessment(definition, opts = {}) {
   }
 
   function startScored() {
+    removeDraft();
     phase = 'scored';
     active = true;
     accumulatedTime = 0;
     resumedAt = Date.now();
     current = 0;
+    saveDraft();
     renderExamShell();
     showItem();
+  }
+
+  function resumeDraft() {
+    Object.assign(answers, draft.answers);
+    skipped.push(...draft.skipped);
+    current = draft.current;
+    accumulatedTime = draft.elapsed_ms;
+    interruptions = draft.interruptions;
+    phase = 'scored';
+    active = true;
+    resumedAt = Date.now();
+    renderExamShell();
+    showItem();
+  }
+
+  function discardDraft() {
+    removeDraft();
+    win.location.reload();
   }
 
   function renderExamShell() {
@@ -1863,7 +1933,7 @@ function mountMatrixAssessment(definition, opts = {}) {
           <span class="pi-exam-toolbar__label">FIGURAL REASONING</span>
           <strong id="exam-count">Practice 1 / ${form.practiceItems.length}</strong>
         </div>
-        <div class="pi-exam-timer" role="timer" aria-label="Time remaining">
+        <div class="pi-exam-timer" role="timer" aria-label="Elapsed working time">
           <svg viewBox="0 0 44 44" aria-hidden="true">
             <circle class="pi-exam-timer__base" cx="22" cy="22" r="18"></circle>
             <circle id="exam-timer-ring" class="pi-exam-timer__ring" cx="22" cy="22" r="18"></circle>
@@ -2049,6 +2119,7 @@ function mountMatrixAssessment(definition, opts = {}) {
       return;
     }
     current++;
+    saveDraft();
     showItem();
   }
 
@@ -2060,15 +2131,15 @@ function mountMatrixAssessment(definition, opts = {}) {
       accumulatedTime += Date.now() - resumedAt;
       resumedAt = 0;
     }
+    removeDraft();
     const workingSeconds = Math.round(accumulatedTime / 1000);
     const scored = scoreInstrument(formDefinition, answers);
     const irt = estimate2pl(form.section.items, answers);
-    const readout = buildReadout(formDefinition, scored.bands);
     record = assembleRecord(formDefinition, {
       responses: answers,
       scores: { 'figural-reasoning': Number(irt.theta.toFixed(3)) },
-      bands: scored.bands,
-      readout,
+      bands: {},
+      readout: [],
       snapshot: '',
       timestamp,
     });
@@ -2143,7 +2214,7 @@ function mountMatrixAssessment(definition, opts = {}) {
         }),
       ]),
       renderRuleProfile(ruleStats),
-      renderInterpretation(readout[0]),
+      renderInterpretation(irt),
       renderResultReflection(),
       renderSaveActions(),
     ]);
@@ -2178,15 +2249,23 @@ function mountMatrixAssessment(definition, opts = {}) {
     return section;
   }
 
-  function renderInterpretation(entry) {
-    if (!entry) return el('div');
+  function renderInterpretation(irt) {
     return el('section', { class: 'pi-exam-interpretation' }, [
-      el('p', { class: 'pi-kicker', text: humanize(entry.band) }),
+      el('p', { class: 'pi-kicker', text: 'Interpret with context' }),
       el('h2', { text: 'Read the conditions as well as the score.' }),
       el('div', { class: 'pi-exam-interpretation__grid' }, [
-        interpretation('What this attempt showed', entry.light),
-        interpretation('What it cannot establish', entry.shadow),
-        interpretation('One useful experiment', entry.one_thing_to_try),
+        interpretation(
+          'What this attempt showed',
+          `${irt.correct} exact constructions across a balanced 28-item form, with a calibrated estimate of ${irt.theta >= 0 ? '+' : ''}${irt.theta.toFixed(2)} theta.`,
+        ),
+        interpretation(
+          'What it cannot establish',
+          'This is one visual format under self-administered conditions. It does not measure the full range of intelligence or establish a percentile, diagnosis, or fixed potential.',
+        ),
+        interpretation(
+          'One useful experiment',
+          'Notice whether rule-by-rule checking, visual organisation, rest, or interruptions changed how effectively you approached the harder matrices.',
+        ),
       ]),
     ]);
   }
@@ -2195,7 +2274,7 @@ function mountMatrixAssessment(definition, opts = {}) {
     const textarea = el('textarea', {
       class: 'pi-textarea',
       rows: '5',
-      placeholder: 'What strategy helped? Where did time pressure change your approach? What would you test differently next time?',
+      placeholder: 'What strategy helped? Where did attention, fatigue, or interruptions change your approach? What would you test differently next time?',
       'aria-label': 'Reflection on this reasoning sitting',
     });
     let saveDelay = 0;
@@ -2323,8 +2402,41 @@ function mountMatrixAssessment(definition, opts = {}) {
     return Math.round((accumulatedTime + live) / 1000);
   }
 
-  function humanize(value) {
-    return String(value).replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  function saveDraft() {
+    if (phase !== 'scored' || current < 0 || !active) return false;
+    const live = resumedAt ? Date.now() - resumedAt : 0;
+    const value = createMatrixDraft({
+      definition,
+      form,
+      answers,
+      skipped,
+      current,
+      elapsedMs: accumulatedTime + live,
+      interruptions,
+    });
+    try {
+      win.localStorage.setItem(DRAFT_KEY, JSON.stringify(value));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function readDraft() {
+    try {
+      const value = win.localStorage.getItem(DRAFT_KEY);
+      return value ? JSON.parse(value) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function removeDraft() {
+    try {
+      win.localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // Local storage may be blocked; there is nothing else to clear.
+    }
   }
 
   function downloadText(text, filename) {
@@ -2393,11 +2505,6 @@ function mountLanding(doc = document) {
       ? `${completed} of ${instrumentCards.length} lenses complete`
       : 'No results yet';
   }
-  for (const avatar of doc.querySelectorAll('.pi-portrait-avatar')) {
-    const progress = instrumentCards.length ? completed / instrumentCards.length : 0;
-    avatar.style.setProperty('--pi-portrait-progress', `${Math.round(progress * 360)}deg`);
-  }
-
   const status = doc.querySelector('[data-library-status]');
   if (status) {
     const count = library.state.records.length;
@@ -2463,6 +2570,7 @@ function aggregateRecords(records) {
           instrument_version: r.instrument_version,
           administration_mode: r.administration?.mode || 'legacy',
           metric: r.administration?.theta != null ? 'theta' : 'raw',
+          standard_error: r.administration?.theta_standard_error,
         });
       }
       if (typeof r.student_snapshot === 'string' && r.student_snapshot.trim() !== '') {
@@ -2682,7 +2790,10 @@ function mountPortraitViewer(ctx = {}) {
   }
 
   function renderOverview(portrait) {
-    const completed = new Set(portrait.instruments.map((item) => item.instrument_id));
+    const knownIds = new Set(INSTRUMENT_ORDER);
+    const completed = new Set(portrait.instruments
+      .map((item) => item.instrument_id)
+      .filter((id) => knownIds.has(id)));
     const completion = Math.round((completed.size / INSTRUMENT_ORDER.length) * 100);
     const repeats = portrait.instruments.filter((item) => item.sittings > 1).length;
     const firstDate = portrait.instruments.reduce((value, item) => {
@@ -2816,13 +2927,23 @@ function mountPortraitViewer(ctx = {}) {
         text: 'Scoring changed between versions, so graphs and deltas use only sittings from the latest version.',
       }));
     }
-    card.appendChild(renderBandGraph(visible, comparableLongitudinal, scaleNames));
+    const usesTheta = visible.some((id) => comparableLongitudinal[id]?.[0]?.metric === 'theta');
+    if (usesTheta) {
+      card.appendChild(el('p', {
+        class: 'pi-hint',
+        text: 'This lens uses calibrated theta with uncertainty, so no categorical band is assigned.',
+      }));
+    } else {
+      card.appendChild(renderBandGraph(visible, comparableLongitudinal, scaleNames));
+    }
     card.appendChild(renderScaleList(visible, comparableLongitudinal, scaleNames));
 
     if (details.length) {
       card.appendChild(el('details', { class: 'pi-trajectory-details' }, [
         el('summary', { text: `Explore ${details.length} finer facets` }),
-        renderBandGraph(details, comparableLongitudinal, scaleNames),
+        details.some((id) => comparableLongitudinal[id]?.[0]?.metric === 'theta')
+          ? null
+          : renderBandGraph(details, comparableLongitudinal, scaleNames),
         renderScaleList(details, comparableLongitudinal, scaleNames),
       ]));
     }
@@ -2908,10 +3029,15 @@ function mountPortraitViewer(ctx = {}) {
             : datePart(latest.timestamp) }),
         ]),
         series.length > 1 ? renderSparkline(series, names[id] || humanize(id)) : null,
-        el('span', {
-          class: `pi-band pi-band--${latest.band || 'unknown'}`,
-          text: latest.band ? humanize(latest.band) : '—',
-        }),
+        latest.metric === 'theta'
+          ? el('span', {
+            class: 'pi-band pi-band--theta',
+            text: `${Number(latest.score) >= 0 ? '+' : ''}${Number(latest.score).toFixed(2)} θ${Number.isFinite(Number(latest.standard_error)) ? ` ± ${Number(latest.standard_error).toFixed(2)}` : ''}`,
+          })
+          : el('span', {
+            class: `pi-band pi-band--${latest.band || 'unknown'}`,
+            text: latest.band ? humanize(latest.band) : '—',
+          }),
       ]);
       if (change) {
         row.appendChild(el('span', {
@@ -2928,11 +3054,12 @@ function mountPortraitViewer(ctx = {}) {
   }
 
   function renderSparkline(series, name) {
+    const metric = series[0]?.metric === 'theta' ? 'calibrated theta' : 'raw-score';
     const svg = el('svg', {
       class: 'pi-sparkline',
       viewBox: '0 0 120 38',
       role: 'img',
-      'aria-label': `${name} raw-score trend across ${series.length} sittings`,
+      'aria-label': `${name} ${metric} trend across ${series.length} sittings`,
     });
     const scores = series.map((point) => Number(point.score));
     const min = Math.min(...scores);

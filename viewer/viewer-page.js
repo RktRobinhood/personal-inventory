@@ -163,7 +163,10 @@ export function mountPortraitViewer(ctx = {}) {
   }
 
   function renderOverview(portrait) {
-    const completed = new Set(portrait.instruments.map((item) => item.instrument_id));
+    const knownIds = new Set(INSTRUMENT_ORDER);
+    const completed = new Set(portrait.instruments
+      .map((item) => item.instrument_id)
+      .filter((id) => knownIds.has(id)));
     const completion = Math.round((completed.size / INSTRUMENT_ORDER.length) * 100);
     const repeats = portrait.instruments.filter((item) => item.sittings > 1).length;
     const firstDate = portrait.instruments.reduce((value, item) => {
@@ -297,13 +300,23 @@ export function mountPortraitViewer(ctx = {}) {
         text: 'Scoring changed between versions, so graphs and deltas use only sittings from the latest version.',
       }));
     }
-    card.appendChild(renderBandGraph(visible, comparableLongitudinal, scaleNames));
+    const usesTheta = visible.some((id) => comparableLongitudinal[id]?.[0]?.metric === 'theta');
+    if (usesTheta) {
+      card.appendChild(el('p', {
+        class: 'pi-hint',
+        text: 'This lens uses calibrated theta with uncertainty, so no categorical band is assigned.',
+      }));
+    } else {
+      card.appendChild(renderBandGraph(visible, comparableLongitudinal, scaleNames));
+    }
     card.appendChild(renderScaleList(visible, comparableLongitudinal, scaleNames));
 
     if (details.length) {
       card.appendChild(el('details', { class: 'pi-trajectory-details' }, [
         el('summary', { text: `Explore ${details.length} finer facets` }),
-        renderBandGraph(details, comparableLongitudinal, scaleNames),
+        details.some((id) => comparableLongitudinal[id]?.[0]?.metric === 'theta')
+          ? null
+          : renderBandGraph(details, comparableLongitudinal, scaleNames),
         renderScaleList(details, comparableLongitudinal, scaleNames),
       ]));
     }
@@ -389,10 +402,15 @@ export function mountPortraitViewer(ctx = {}) {
             : datePart(latest.timestamp) }),
         ]),
         series.length > 1 ? renderSparkline(series, names[id] || humanize(id)) : null,
-        el('span', {
-          class: `pi-band pi-band--${latest.band || 'unknown'}`,
-          text: latest.band ? humanize(latest.band) : '—',
-        }),
+        latest.metric === 'theta'
+          ? el('span', {
+            class: 'pi-band pi-band--theta',
+            text: `${Number(latest.score) >= 0 ? '+' : ''}${Number(latest.score).toFixed(2)} θ${Number.isFinite(Number(latest.standard_error)) ? ` ± ${Number(latest.standard_error).toFixed(2)}` : ''}`,
+          })
+          : el('span', {
+            class: `pi-band pi-band--${latest.band || 'unknown'}`,
+            text: latest.band ? humanize(latest.band) : '—',
+          }),
       ]);
       if (change) {
         row.appendChild(el('span', {
@@ -409,11 +427,12 @@ export function mountPortraitViewer(ctx = {}) {
   }
 
   function renderSparkline(series, name) {
+    const metric = series[0]?.metric === 'theta' ? 'calibrated theta' : 'raw-score';
     const svg = el('svg', {
       class: 'pi-sparkline',
       viewBox: '0 0 120 38',
       role: 'img',
-      'aria-label': `${name} raw-score trend across ${series.length} sittings`,
+      'aria-label': `${name} ${metric} trend across ${series.length} sittings`,
     });
     const scores = series.map((point) => Number(point.score));
     const min = Math.min(...scores);

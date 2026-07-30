@@ -1,7 +1,8 @@
-import { assembleRecord, buildReadout } from '../engine/engine.js';
+import { assembleRecord } from '../engine/engine.js';
 import { scoreInstrument } from '../engine/scoring.js';
 import { drawCode, drawElement } from '../engine/sections/scored-matrix.js';
 import { createMatrixForm, randomSeed } from '../engine/matrix-form.js';
+import { createMatrixDraft, normalizeMatrixDraft } from '../engine/matrix-draft.js';
 import { estimate2pl } from '../engine/irt.js';
 import { manualDownload } from '../engine/save-adapter.js';
 import {
@@ -15,6 +16,7 @@ import {
 import { mountMotion } from '../engine/motion.js';
 
 const EMPTY_RESPONSE = '00000000000000000000';
+const DRAFT_KEY = 'personal-inventory.matrix-draft.v2';
 
 export function mountMatrixAssessment(definition, opts = {}) {
   const doc = opts.doc || document;
@@ -25,14 +27,31 @@ export function mountMatrixAssessment(definition, opts = {}) {
   const sourceSection = definition.sections.find((section) => section.type === 'scored-matrix');
   if (!sourceSection) throw new Error('Matrix assessment has no item bank');
   const library = loadLibrary();
-  const seenIds = library.state.records
-    .filter((record) => record.instrument_id === definition.id)
-    .flatMap((record) => Object.keys(record.raw_responses || {}))
-    .filter((id) => id.startsWith('omib-'));
-  const form = createMatrixForm(sourceSection, {
+  const exposureCounts = {};
+  for (const savedRecord of library.state.records.filter((item) => item.instrument_id === definition.id)) {
+    const ids = new Set([
+      ...Object.keys(savedRecord.raw_responses || {}),
+      ...(savedRecord.administration?.item_order || []),
+    ]);
+    for (const id of ids) {
+      if (id.startsWith('omib-')) exposureCounts[id] = (exposureCounts[id] || 0) + 1;
+    }
+  }
+  const storedDraft = readDraft();
+  const draft = normalizeMatrixDraft(storedDraft, definition, sourceSection);
+  let form = createMatrixForm(sourceSection, {
     seed: randomSeed(win.crypto),
-    excludeIds: seenIds,
+    exposureCounts,
   });
+  if (draft) {
+    const byId = new Map(sourceSection.items.map((item) => [item.id, item]));
+    form = {
+      ...form,
+      seed: draft.seed,
+      reused: draft.reused,
+      section: { ...sourceSection, items: draft.item_order.map((id) => byId.get(id)) },
+    };
+  }
   const formDefinition = {
     ...definition,
     sections: definition.sections.map((section) =>
@@ -61,6 +80,7 @@ export function mountMatrixAssessment(definition, opts = {}) {
     event.returnValue = '';
   });
   win.addEventListener('pagehide', () => {
+    if (active) saveDraft();
     if (record) persistRecord();
   });
   doc.addEventListener('visibilitychange', () => {
@@ -69,6 +89,7 @@ export function mountMatrixAssessment(definition, opts = {}) {
       accumulatedTime += Date.now() - resumedAt;
       resumedAt = 0;
       interruptions++;
+      saveDraft();
     } else {
       resumedAt = Date.now();
     }
@@ -108,7 +129,20 @@ export function mountMatrixAssessment(definition, opts = {}) {
         el('p', {
           text: 'Choose a quiet moment. Elapsed time pauses when this page is hidden and is recorded only as context.',
         }),
-        button('Start guided practice', 'pi-btn pi-btn--primary pi-btn--large', startPractice),
+        draft
+          ? el('div', { class: 'pi-exam-resume' }, [
+            button(
+              `Resume puzzle ${draft.current + 1} of ${form.section.items.length}`,
+              'pi-btn pi-btn--primary pi-btn--large',
+              resumeDraft,
+            ),
+            button('Discard saved sitting and start fresh', 'pi-btn pi-btn--quiet', discardDraft),
+            el('p', {
+              class: 'pi-hint',
+              text: `Checkpoint saved ${draft.saved_at ? new Date(draft.saved_at).toLocaleString() : 'in this browser'}.`,
+            }),
+          ])
+          : button('Start guided practice', 'pi-btn pi-btn--primary pi-btn--large', startPractice),
       ]),
     ]);
     root.append(hero, briefing);
@@ -123,13 +157,33 @@ export function mountMatrixAssessment(definition, opts = {}) {
   }
 
   function startScored() {
+    removeDraft();
     phase = 'scored';
     active = true;
     accumulatedTime = 0;
     resumedAt = Date.now();
     current = 0;
+    saveDraft();
     renderExamShell();
     showItem();
+  }
+
+  function resumeDraft() {
+    Object.assign(answers, draft.answers);
+    skipped.push(...draft.skipped);
+    current = draft.current;
+    accumulatedTime = draft.elapsed_ms;
+    interruptions = draft.interruptions;
+    phase = 'scored';
+    active = true;
+    resumedAt = Date.now();
+    renderExamShell();
+    showItem();
+  }
+
+  function discardDraft() {
+    removeDraft();
+    win.location.reload();
   }
 
   function renderExamShell() {
@@ -141,7 +195,7 @@ export function mountMatrixAssessment(definition, opts = {}) {
           <span class="pi-exam-toolbar__label">FIGURAL REASONING</span>
           <strong id="exam-count">Practice 1 / ${form.practiceItems.length}</strong>
         </div>
-        <div class="pi-exam-timer" role="timer" aria-label="Time remaining">
+        <div class="pi-exam-timer" role="timer" aria-label="Elapsed working time">
           <svg viewBox="0 0 44 44" aria-hidden="true">
             <circle class="pi-exam-timer__base" cx="22" cy="22" r="18"></circle>
             <circle id="exam-timer-ring" class="pi-exam-timer__ring" cx="22" cy="22" r="18"></circle>
@@ -327,6 +381,7 @@ export function mountMatrixAssessment(definition, opts = {}) {
       return;
     }
     current++;
+    saveDraft();
     showItem();
   }
 
@@ -338,15 +393,15 @@ export function mountMatrixAssessment(definition, opts = {}) {
       accumulatedTime += Date.now() - resumedAt;
       resumedAt = 0;
     }
+    removeDraft();
     const workingSeconds = Math.round(accumulatedTime / 1000);
     const scored = scoreInstrument(formDefinition, answers);
     const irt = estimate2pl(form.section.items, answers);
-    const readout = buildReadout(formDefinition, scored.bands);
     record = assembleRecord(formDefinition, {
       responses: answers,
       scores: { 'figural-reasoning': Number(irt.theta.toFixed(3)) },
-      bands: scored.bands,
-      readout,
+      bands: {},
+      readout: [],
       snapshot: '',
       timestamp,
     });
@@ -421,7 +476,7 @@ export function mountMatrixAssessment(definition, opts = {}) {
         }),
       ]),
       renderRuleProfile(ruleStats),
-      renderInterpretation(readout[0]),
+      renderInterpretation(irt),
       renderResultReflection(),
       renderSaveActions(),
     ]);
@@ -456,15 +511,23 @@ export function mountMatrixAssessment(definition, opts = {}) {
     return section;
   }
 
-  function renderInterpretation(entry) {
-    if (!entry) return el('div');
+  function renderInterpretation(irt) {
     return el('section', { class: 'pi-exam-interpretation' }, [
-      el('p', { class: 'pi-kicker', text: humanize(entry.band) }),
+      el('p', { class: 'pi-kicker', text: 'Interpret with context' }),
       el('h2', { text: 'Read the conditions as well as the score.' }),
       el('div', { class: 'pi-exam-interpretation__grid' }, [
-        interpretation('What this attempt showed', entry.light),
-        interpretation('What it cannot establish', entry.shadow),
-        interpretation('One useful experiment', entry.one_thing_to_try),
+        interpretation(
+          'What this attempt showed',
+          `${irt.correct} exact constructions across a balanced 28-item form, with a calibrated estimate of ${irt.theta >= 0 ? '+' : ''}${irt.theta.toFixed(2)} theta.`,
+        ),
+        interpretation(
+          'What it cannot establish',
+          'This is one visual format under self-administered conditions. It does not measure the full range of intelligence or establish a percentile, diagnosis, or fixed potential.',
+        ),
+        interpretation(
+          'One useful experiment',
+          'Notice whether rule-by-rule checking, visual organisation, rest, or interruptions changed how effectively you approached the harder matrices.',
+        ),
       ]),
     ]);
   }
@@ -473,7 +536,7 @@ export function mountMatrixAssessment(definition, opts = {}) {
     const textarea = el('textarea', {
       class: 'pi-textarea',
       rows: '5',
-      placeholder: 'What strategy helped? Where did time pressure change your approach? What would you test differently next time?',
+      placeholder: 'What strategy helped? Where did attention, fatigue, or interruptions change your approach? What would you test differently next time?',
       'aria-label': 'Reflection on this reasoning sitting',
     });
     let saveDelay = 0;
@@ -601,8 +664,41 @@ export function mountMatrixAssessment(definition, opts = {}) {
     return Math.round((accumulatedTime + live) / 1000);
   }
 
-  function humanize(value) {
-    return String(value).replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  function saveDraft() {
+    if (phase !== 'scored' || current < 0 || !active) return false;
+    const live = resumedAt ? Date.now() - resumedAt : 0;
+    const value = createMatrixDraft({
+      definition,
+      form,
+      answers,
+      skipped,
+      current,
+      elapsedMs: accumulatedTime + live,
+      interruptions,
+    });
+    try {
+      win.localStorage.setItem(DRAFT_KEY, JSON.stringify(value));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function readDraft() {
+    try {
+      const value = win.localStorage.getItem(DRAFT_KEY);
+      return value ? JSON.parse(value) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function removeDraft() {
+    try {
+      win.localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // Local storage may be blocked; there is nothing else to clear.
+    }
   }
 
   function downloadText(text, filename) {
