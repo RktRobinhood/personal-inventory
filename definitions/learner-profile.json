@@ -1,0 +1,105 @@
+{
+  "id": "learner-profile",
+  "version": "1.0.0",
+  "title": "Learner Profile",
+  "source": "IB Learner Profile (10 attributes). Aspirational/unscored. Attribute framework is sourced from the IB; reframe copy is authored — see content-sources/learner-profile.md.",
+  "citation": "International Baccalaureate Organization (2017). The IB learner profile. https://www.ibo.org/benefits/learner-profile/",
+  "license": "IB published framework (attribute names/concept used for an internal teaching tool). Confirm IB trademark/branding usage with the IB coordinator. Reframe copy authored in-house. See REVIEW.md.",
+  "intro": "School can be an unnatural space — it asks things of you that life often doesn't, and it can reward compliance as easily as growth. This part is not graded and not scored. It is about who you want to become. Each attribute below appears twice: first the cost of lacking it, then the empowered version and one concrete move.",
+  "sections": [
+    {
+      "type": "info",
+      "id": "intro",
+      "title": "How to read this",
+      "body": "These are the ten attributes of the IB learner profile, reframed. The point is not to tick boxes — it is to notice which ones would change your life most if you leaned into them. Read each, map it to your own experience, then pick a couple to actually work on."
+    },
+    {
+      "type": "info",
+      "id": "lp-inquirers",
+      "title": "Inquirers",
+      "body": "A person who stops asking questions is easy to manage — they accept what they are handed and stop noticing what is missing. Curiosity is leverage: the one who keeps asking 'why' and 'what if' sees options everyone else walks past. One move: this week, ask one question you would normally let slide."
+    },
+    {
+      "type": "info",
+      "id": "lp-knowledgeable",
+      "title": "Knowledgeable",
+      "body": "Without knowledge of your own, you borrow everyone else's — and borrowed knowledge is easy to bend. Real understanding across subjects is what lets you notice when something does not add up. One move: pick one topic and learn it well enough to teach it to someone."
+    },
+    {
+      "type": "info",
+      "id": "lp-thinkers",
+      "title": "Thinkers",
+      "body": "Skip the thinking and someone will gladly do it for you — and not in your interest. Critical and creative thinking is how reasoned, ethical choices get made instead of inherited. One move: on the next real decision, write the reasons down before deciding."
+    },
+    {
+      "type": "info",
+      "id": "lp-communicators",
+      "title": "Communicators",
+      "body": "Stay silent and other people will speak for you, framing your ideas in your absence. Expressing yourself clearly — in more than one language and in many forms — is how your ideas travel and hold up. One move: say the thing you would normally keep to yourself, once, and say it well."
+    },
+    {
+      "type": "info",
+      "id": "lp-principled",
+      "title": "Principled",
+      "body": "A person with no firm principles can be moved by whoever pressures them last. Acting with integrity, honesty and fairness is what makes someone hard to manipulate. One move: name one line you will not cross, before the test for it ever comes."
+    },
+    {
+      "type": "info",
+      "id": "lp-open-minded",
+      "title": "Open-minded",
+      "body": "A mind that will not change is the easiest one to use — predictable, and steered wherever it is aimed. Weighing other perspectives alongside your own keeps your thinking your own, not the loudest voice's. One move: find one view you usually dismiss, and argue its strongest version."
+    },
+    {
+      "type": "info",
+      "id": "lp-caring",
+      "title": "Caring",
+      "body": "Care for no one and you end up alone — with no one who will act for you either. Empathy and respect build the relationships that actually carry people through hard things. One move: do one quiet, useful thing for someone with no audience watching."
+    },
+    {
+      "type": "info",
+      "id": "lp-risk-takers",
+      "title": "Risk-takers (Courageous)",
+      "body": "Avoid every risk and your world shrinks to whatever feels safe — and others get to decide where that edge sits. Meeting the unfamiliar with courage and forethought is how anyone grows past it. One move: try one thing this week where you might visibly fail."
+    },
+    {
+      "type": "info",
+      "id": "lp-balanced",
+      "title": "Balanced",
+      "body": "Run yourself into the ground on one thing and you become easy to burn out — and easy to control. Balancing intellectual, physical and emotional life is what keeps a person durable over two long years. One move: protect one non-negotiable slot for rest or movement this week."
+    },
+    {
+      "type": "info",
+      "id": "lp-reflective",
+      "title": "Reflective",
+      "body": "Never look back and the same mistakes simply repeat — convenient for everyone except the one making them. Honestly reviewing your strengths and limits is how real improvement happens instead of just churn. One move: write two lines tonight on what worked today and what did not."
+    },
+    {
+      "type": "select-and-commit",
+      "id": "commit",
+      "title": "Choose where to push",
+      "prompt": "Which two or three of these would change the most if you leaned into them this year? Choose the ones worth real effort.",
+      "min_select": 1,
+      "max_select": 3,
+      "options": [
+        { "id": "inquirers", "label": "Inquirers — keep asking the questions others skip", "ib_attribute": "Inquirers" },
+        { "id": "knowledgeable", "label": "Knowledgeable — know enough to spot what doesn't add up", "ib_attribute": "Knowledgeable" },
+        { "id": "thinkers", "label": "Thinkers — reason it out instead of inheriting it", "ib_attribute": "Thinkers" },
+        { "id": "communicators", "label": "Communicators — say it, so others don't say it for you", "ib_attribute": "Communicators" },
+        { "id": "principled", "label": "Principled — hold a line that can't be pressured", "ib_attribute": "Principled" },
+        { "id": "open-minded", "label": "Open-minded — keep your thinking your own", "ib_attribute": "Open-minded" },
+        { "id": "caring", "label": "Caring — build the ties that carry you", "ib_attribute": "Caring" },
+        { "id": "risk-takers", "label": "Risk-takers — meet the unfamiliar on purpose", "ib_attribute": "Risk-takers" },
+        { "id": "balanced", "label": "Balanced — stay durable, not burnt out", "ib_attribute": "Balanced" },
+        { "id": "reflective", "label": "Reflective — review, so mistakes don't just repeat", "ib_attribute": "Reflective" }
+      ]
+    },
+    {
+      "type": "free-reflection",
+      "id": "synthesis",
+      "title": "Your commitment",
+      "prompt": "In your own words: which attribute did you choose, why that one, and what is the first concrete move you will make? Future-you will read this back at the end of the DP.",
+      "placeholder": "In my own words…",
+      "is_snapshot": true
+    }
+  ]
+}

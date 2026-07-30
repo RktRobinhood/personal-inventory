@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#185c4b">
+  <title>Your Portrait — Personal Inventory</title>
+  <link rel="stylesheet" href="../instruments/instrument.css">
+</head>
+<body>
+  <nav class="pi-sitebar" aria-label="Personal Inventory">
+    <a class="pi-brand" href="../index.html">
+      <span class="pi-brand__mark" aria-hidden="true"></span>
+      <span>Personal Inventory</span>
+    </a>
+    <span class="pi-privacy"><span>Offline & private</span></span>
+  </nav>
+  <main class="pi-wrap pi-wrap--wide">
+    <header class="pi-instrument__hero">
+      <p class="pi-eyebrow">Your private archive</p>
+      <h1 class="pi-instrument__title">Your portrait over time</h1>
+      <p class="pi-instrument__intro">Bring your saved results together to see patterns, changes, and the reflections you wrote along the way. The files are read only on this device.</p>
+      <div class="pi-meta">
+        <span class="pi-meta__item">No upload</span>
+        <span class="pi-meta__item">No account</span>
+        <span class="pi-meta__item">You choose the files</span>
+      </div>
+    </header>
+    <section class="pi-upload">
+      <label id="file-summary" for="files" class="pi-section__title">Choose all the result files you want to compare</label>
+      <p class="pi-hint">Tip: hold Ctrl or Shift while selecting to choose several files at once.</p>
+      <input class="pi-file-input" id="files" type="file" accept="application/json,.json" multiple>
+    </section>
+    <div id="portrait" aria-live="polite">
+      <div class="pi-empty"><p>Your collected patterns will appear here.</p></div>
+    </div>
+  </main>
+  <script src="../app.bundle.js"></script>
+  <script>PI.mountPortraitViewer({ doc: document });</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "personal-inventory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A private self-knowledge instrument suite for IB students. Vanilla HTML/CSS/JS, no build step; Node-only test gates.",
+  "type": "module",
+  "scripts": {
+    "build": "node build/bundle.mjs",
+    "test": "node test/run-gates.js"
+  },
+  "license": "SEE REVIEW.md (per-instrument source licenses tracked separately)"
+}

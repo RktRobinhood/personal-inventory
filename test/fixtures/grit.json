@@ -1,0 +1,39 @@
+{
+  "instrument": "grit",
+  "definition": "definitions/grit.json",
+  "_note": "Hand-derived expected values (NOT copied from engine output). Facets range 0-16: low 0-5, balanced 6-10, high 11-16. Grit domain 0-32: low 0-10, balanced 11-21, high 22-32. Reverse value = 4 - raw. Item order main#0..7 = [cons, pers, cons, pers, cons, cons, pers, pers].",
+  "cases": [
+    {
+      "name": "max-grit",
+      "responses": { "main#0": 0, "main#1": 4, "main#2": 0, "main#3": 4, "main#4": 0, "main#5": 0, "main#6": 4, "main#7": 4 },
+      "expect": {
+        "scores": { "consistency_of_interest": 16, "perseverance_of_effort": 16, "grit": 32 },
+        "bands": { "consistency_of_interest": "high", "perseverance_of_effort": "high", "grit": "high" }
+      }
+    },
+    {
+      "name": "min-grit",
+      "responses": { "main#0": 4, "main#1": 0, "main#2": 4, "main#3": 0, "main#4": 4, "main#5": 4, "main#6": 0, "main#7": 0 },
+      "expect": {
+        "scores": { "consistency_of_interest": 0, "perseverance_of_effort": 0, "grit": 0 },
+        "bands": { "consistency_of_interest": "low", "perseverance_of_effort": "low", "grit": "low" }
+      }
+    },
+    {
+      "name": "all-midpoint-balanced",
+      "responses": { "main#0": 2, "main#1": 2, "main#2": 2, "main#3": 2, "main#4": 2, "main#5": 2, "main#6": 2, "main#7": 2 },
+      "expect": {
+        "scores": { "consistency_of_interest": 8, "perseverance_of_effort": 8, "grit": 16 },
+        "bands": { "consistency_of_interest": "balanced", "perseverance_of_effort": "balanced", "grit": "balanced" }
+      }
+    },
+    {
+      "name": "uniform-very-much-like-me",
+      "responses": { "main#0": 4, "main#1": 4, "main#2": 4, "main#3": 4, "main#4": 4, "main#5": 4, "main#6": 4, "main#7": 4 },
+      "expect": {
+        "scores": { "consistency_of_interest": 0, "perseverance_of_effort": 16, "grit": 16 },
+        "bands": { "consistency_of_interest": "low", "perseverance_of_effort": "high", "grit": "balanced" }
+      }
+    }
+  ]
+}

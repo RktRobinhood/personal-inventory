@@ -1,0 +1,67 @@
+{
+  "id": "toy",
+  "version": "1.0.0",
+  "title": "Toy instrument (engine regression test only)",
+  "source": "Synthetic — not a real psychometric instrument.",
+  "citation": "N/A (engine test fixture).",
+  "license": "Public Domain (synthetic).",
+  "sections": [
+    {
+      "type": "info",
+      "id": "intro",
+      "body": "A synthetic instrument used to regression-test the scoring engine. Two facets roll up into one domain; one item per facet is reverse-keyed."
+    },
+    {
+      "type": "scored-likert",
+      "id": "main",
+      "anchors": ["Very inaccurate", "Inaccurate", "Neutral", "Accurate", "Very accurate"],
+      "band_thresholds": { "bands": ["low", "balanced", "high"], "cuts": [0.3333, 0.6667] },
+      "items": [
+        { "text": "I expect good things to happen.", "scale": "optimism", "reverse": false, "points": 5 },
+        { "text": "I dwell on what might go wrong.", "scale": "optimism", "reverse": true, "points": 5 },
+        { "text": "I stay relaxed when things get tense.", "scale": "calm", "reverse": false, "points": 5 },
+        { "text": "I worry about many things.", "scale": "calm", "reverse": true, "points": 5 }
+      ],
+      "scales": [
+        {
+          "id": "wellbeing",
+          "name": "Wellbeing",
+          "construct_explainer": "Wellbeing here groups two related tendencies; the score reflects how the answers lean across both facets.",
+          "bands": {
+            "low": { "light": "Room to notice strain early.", "shadow": "Answers may lean toward a heavier load.", "one_thing_to_try": "Name one thing that went well today." },
+            "balanced": { "light": "A workable mix.", "shadow": "Can swing either way under pressure.", "one_thing_to_try": "Notice which facet pulls hardest this week." },
+            "high": { "light": "Answers lean toward steadiness.", "shadow": "Steady answers can mask real stress.", "one_thing_to_try": "Check whether the steadiness is real or rehearsed." }
+          }
+        },
+        {
+          "id": "optimism",
+          "name": "Optimism",
+          "parent": "wellbeing",
+          "construct_explainer": "Optimism reflects a tendency to expect favourable outcomes.",
+          "bands": {
+            "low": { "light": "Quick to spot risks.", "shadow": "Answers may lean toward expecting the worst.", "one_thing_to_try": "List one realistic good outcome." },
+            "balanced": { "light": "Weighs good and bad.", "shadow": "May hesitate when a call is needed.", "one_thing_to_try": "Pick the more hopeful read once this week." },
+            "high": { "light": "Answers lean toward hopeful expectations.", "shadow": "Hope can skip over real risks.", "one_thing_to_try": "Name one risk you might be glossing over." }
+          }
+        },
+        {
+          "id": "calm",
+          "name": "Calm",
+          "parent": "wellbeing",
+          "construct_explainer": "Calm reflects a tendency to stay settled when conditions get tense.",
+          "bands": {
+            "low": { "light": "Sensitive to what matters.", "shadow": "Answers may lean toward easily rattled.", "one_thing_to_try": "Try one slow breath before reacting." },
+            "balanced": { "light": "Feels it but keeps moving.", "shadow": "Can tip either way on a hard day.", "one_thing_to_try": "Notice the earliest sign of tension." },
+            "high": { "light": "Answers lean toward staying settled.", "shadow": "Settled answers can hide a real signal.", "one_thing_to_try": "Ask whether calm is helping or avoiding." }
+          }
+        }
+      ]
+    },
+    {
+      "type": "free-reflection",
+      "id": "synth",
+      "prompt": "Which of these tendencies fits, and which does not? What is one thing you will try?",
+      "is_snapshot": true
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "instrument_id": "self-efficacy",
+  "instrument_version": "1.0.0",
+  "timestamp": "2026-08-20T09:05:00Z",
+  "variant": "full",
+  "scores": {
+    "self_efficacy": 30
+  },
+  "bands": {
+    "self_efficacy": "high"
+  },
+  "readout": [
+    {
+      "scale": "self_efficacy",
+      "scale_name": "General self-efficacy",
+      "band": "high",
+      "construct_explainer": "Self-efficacy is the belief that one can handle demands and reach goals through one's own effort. It tends to predict persistence and how challenges are approached, and research suggests it can grow with experience — it describes a current belief, not a fixed trait.",
+      "light": "Answers leaning higher often go with taking demands on directly and recovering from setbacks.",
+      "shadow": "A strong lean can tip into underestimating real difficulty or skipping preparation.",
+      "one_thing_to_try": "Before the next big task, name one thing that could go wrong and plan a response."
+    }
+  ],
+  "student_snapshot": "I feel capable lately; I want to keep that under pressure.",
+  "raw_responses": {
+    "main#0": 3,
+    "main#1": 3,
+    "main#2": 3,
+    "main#3": 3,
+    "main#4": 3,
+    "main#5": 3,
+    "main#6": 3,
+    "main#7": 3,
+    "main#8": 3,
+    "main#9": 3
+  }
+}

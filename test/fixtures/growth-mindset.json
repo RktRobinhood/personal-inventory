@@ -1,0 +1,37 @@
+{
+  "instrument": "growth-mindset",
+  "definition": "definitions/growth-mindset.json",
+  "_note": "Hand-derived (NOT from engine). Single scale, 3 items, 6-pt (index 0-5), max 15. cuts [0.3333,0.6667]. Upper cut 0.6667*15 = 10.0005, so score 10 (=0.6667) falls JUST BELOW and is 'mixed'; growth-lean needs >=11. Bands: fixed-lean 0-4, mixed 5-10, growth-lean 11-15. (See REVIEW.md note on threshold rounding vs exact thirds.)",
+  "cases": [
+    {
+      "name": "all-strongly-disagree-growth",
+      "responses": { "main#0": 5, "main#1": 5, "main#2": 5 },
+      "expect": { "scores": { "growth_mindset": 15 }, "bands": { "growth_mindset": "growth-lean" } }
+    },
+    {
+      "name": "all-strongly-agree-fixed",
+      "responses": { "main#0": 0, "main#1": 0, "main#2": 0 },
+      "expect": { "scores": { "growth_mindset": 0 }, "bands": { "growth_mindset": "fixed-lean" } }
+    },
+    {
+      "name": "edge-fixed-4",
+      "responses": { "main#0": 2, "main#1": 1, "main#2": 1 },
+      "expect": { "scores": { "growth_mindset": 4 }, "bands": { "growth_mindset": "fixed-lean" } }
+    },
+    {
+      "name": "edge-mixed-5",
+      "responses": { "main#0": 2, "main#1": 2, "main#2": 1 },
+      "expect": { "scores": { "growth_mindset": 5 }, "bands": { "growth_mindset": "mixed" } }
+    },
+    {
+      "name": "edge-mixed-top-10",
+      "responses": { "main#0": 5, "main#1": 5, "main#2": 0 },
+      "expect": { "scores": { "growth_mindset": 10 }, "bands": { "growth_mindset": "mixed" } }
+    },
+    {
+      "name": "edge-growth-11",
+      "responses": { "main#0": 5, "main#1": 5, "main#2": 1 },
+      "expect": { "scores": { "growth_mindset": 11 }, "bands": { "growth_mindset": "growth-lean" } }
+    }
+  ]
+}

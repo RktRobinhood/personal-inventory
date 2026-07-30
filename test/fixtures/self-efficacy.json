@@ -1,0 +1,27 @@
+{
+  "instrument": "self-efficacy",
+  "definition": "definitions/self-efficacy.json",
+  "_note": "Hand-derived (NOT from engine output). Single scale, 10 items, 4-pt (index 0-3), max 30. cuts [0.3333,0.6667] over 0-30: low 0-9, balanced 10-20, high >=21. NB 20/30≈0.6667 falls just BELOW the cut, so 20 is balanced, not high.",
+  "cases": [
+    {
+      "name": "all-exactly-true",
+      "responses": { "main#0": 3, "main#1": 3, "main#2": 3, "main#3": 3, "main#4": 3, "main#5": 3, "main#6": 3, "main#7": 3, "main#8": 3, "main#9": 3 },
+      "expect": { "scores": { "self_efficacy": 30 }, "bands": { "self_efficacy": "high" } }
+    },
+    {
+      "name": "all-not-at-all-true",
+      "responses": { "main#0": 0, "main#1": 0, "main#2": 0, "main#3": 0, "main#4": 0, "main#5": 0, "main#6": 0, "main#7": 0, "main#8": 0, "main#9": 0 },
+      "expect": { "scores": { "self_efficacy": 0 }, "bands": { "self_efficacy": "low" } }
+    },
+    {
+      "name": "all-moderately-true-boundary-20-balanced",
+      "responses": { "main#0": 2, "main#1": 2, "main#2": 2, "main#3": 2, "main#4": 2, "main#5": 2, "main#6": 2, "main#7": 2, "main#8": 2, "main#9": 2 },
+      "expect": { "scores": { "self_efficacy": 20 }, "bands": { "self_efficacy": "balanced" } }
+    },
+    {
+      "name": "low-boundary-9",
+      "responses": { "main#0": 1, "main#1": 1, "main#2": 1, "main#3": 1, "main#4": 1, "main#5": 1, "main#6": 1, "main#7": 1, "main#8": 1, "main#9": 0 },
+      "expect": { "scores": { "self_efficacy": 9 }, "bands": { "self_efficacy": "low" } }
+    }
+  ]
+}

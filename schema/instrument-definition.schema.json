@@ -1,0 +1,267 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://personal-inventory.local/schema/instrument-definition.schema.json",
+  "title": "Instrument Definition",
+  "description": "An instrument is DATA, not code (BUILD.md Operating Rule 2). This contract defines a single instrument: provenance fields plus an ordered list of sections. The engine renders any definition that validates here. Scored sections carry their own scales, criterion-referenced band thresholds, a neutral construct_explainer, and tendency-language band copy. Aspirational section types carry no scoring.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "version", "title", "source", "citation", "license", "sections"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Stable machine id, e.g. \"bigfive\". Used in record files and viewer aggregation."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Semver. The quantitative spine must stay byte-for-byte identical across sittings for comparability (DESIGN.md); bump only on a real content change."
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-facing title shown at the top of the instrument."
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Where the item pool came from (e.g. \"IPIP-NEO-120\"). Citation/license presence is a Layer-1 gate; transcribe, never invent (Operating Rule 3)."
+    },
+    "citation": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Full bibliographic citation for the source pool, pointing at content-sources/<id>.md."
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "description": "License of the source items (e.g. \"Public Domain (IPIP)\"). VIA proprietary items are forbidden; strengths uses IPIP."
+    },
+    "intro": {
+      "type": "string",
+      "description": "Optional framing shown before the first section."
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ordered sections. Rendered top to bottom in a single sitting.",
+      "items": { "$ref": "#/$defs/section" }
+    }
+  },
+  "$defs": {
+    "section": {
+      "description": "One of the five fixed section types, discriminated by `type`.",
+      "type": "object",
+      "required": ["type"],
+      "oneOf": [
+        { "$ref": "#/$defs/infoSection" },
+        { "$ref": "#/$defs/scoredLikertSection" },
+        { "$ref": "#/$defs/selfRatingSection" },
+        { "$ref": "#/$defs/selectAndCommitSection" },
+        { "$ref": "#/$defs/freeReflectionSection" }
+      ]
+    },
+
+    "infoSection": {
+      "description": "A teaching / framing block. No scoring, no input.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "body"],
+      "properties": {
+        "type": { "const": "info" },
+        "id": { "$ref": "#/$defs/sectionId" },
+        "title": { "type": "string" },
+        "body": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Teaching copy (plain text / light markdown). Subject to the essence-language linter."
+        }
+      }
+    },
+
+    "scoredLikertSection": {
+      "description": "Psychometric Likert section. Items load onto scales; scales sum (with reverse-keying) and map to criterion-referenced bands. Each scale ships a neutral construct_explainer plus per-band light/shadow/one_thing_to_try copy in tendency language.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "anchors", "band_thresholds", "items", "scales"],
+      "properties": {
+        "type": { "const": "scored-likert" },
+        "id": { "$ref": "#/$defs/sectionId" },
+        "title": { "type": "string" },
+        "intro": { "type": "string", "description": "Optional teaching copy before the items." },
+        "anchors": {
+          "type": "array",
+          "minItems": 2,
+          "description": "Likert response labels in ascending order, e.g. [\"Very inaccurate\", ... , \"Very accurate\"]. The number of anchors is the response range; an item's `points` must not exceed it.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "band_thresholds": {
+          "description": "Criterion-referenced cut points expressed as fractions (0..1) of each scale's OWN min..max range (DESIGN.md: thirds, not norm-referenced percentiles). The engine normalizes each scale's summed score into [0,1] and assigns the band whose interval contains it. `cuts` must be strictly ascending and one shorter than `bands`.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["bands", "cuts"],
+          "properties": {
+            "bands": {
+              "type": "array",
+              "minItems": 2,
+              "description": "Ordered band ids from lowest to highest, e.g. [\"low\", \"balanced\", \"high\"]. Every scale must supply per-band copy keyed by exactly these ids.",
+              "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" }
+            },
+            "cuts": {
+              "type": "array",
+              "minItems": 1,
+              "description": "Fractional boundaries in (0,1), strictly ascending. Length = bands.length - 1. Default thirds = [0.3333, 0.6667].",
+              "items": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 }
+            }
+          }
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["text", "scale", "reverse", "points"],
+            "properties": {
+              "id": { "type": "string", "description": "Optional stable item id for fixtures/record raw_responses keys." },
+              "text": { "type": "string", "minLength": 1, "description": "Verbatim item wording transcribed from the cited source." },
+              "scale": { "type": "string", "minLength": 1, "description": "Id of the scale this item loads onto (must match a scales[].id)." },
+              "reverse": { "type": "boolean", "description": "If true, the response is reverse-keyed before summing." },
+              "points": { "type": "integer", "minimum": 2, "description": "Number of response options for this item; must be <= anchors.length." }
+            }
+          }
+        },
+        "scales": {
+          "type": "array",
+          "minItems": 1,
+          "description": "Scales/facets this section computes. A scale may declare a `parent` to roll facets up into a domain (e.g. Big Five facets -> domains).",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "construct_explainer", "bands"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
+              "name": { "type": "string", "minLength": 1, "description": "Human-facing scale/facet name." },
+              "parent": { "type": "string", "description": "Optional id of a parent domain scale this facet rolls up into." },
+              "construct_explainer": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Neutral explanation of WHAT the construct is and what psychology understands about it. Not a verdict about the person. Tendency language only."
+              },
+              "bands": {
+                "type": "object",
+                "description": "Per-band copy, keyed by the band ids declared in band_thresholds.bands. Every declared band must be present (enforced by the engine/gates against band_thresholds).",
+                "minProperties": 2,
+                "additionalProperties": { "$ref": "#/$defs/bandCopy" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "bandCopy": {
+      "description": "Tendency-language copy for one band of one scale. 'No trait is bad': every band has a light side and a shadow, plus one concrete nudge.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["light", "shadow", "one_thing_to_try"],
+      "properties": {
+        "light": { "type": "string", "minLength": 1, "description": "The upside / where this tendency helps." },
+        "shadow": { "type": "string", "minLength": 1, "description": "Where this tendency can get in the way." },
+        "one_thing_to_try": { "type": "string", "minLength": 1, "description": "One concrete, optional experiment to push against it." }
+      }
+    },
+
+    "selfRatingSection": {
+      "description": "Student rates themselves on named dimensions. Aspirational/qualitative: no psychometric scales, no bands. Responses are stored verbatim in the record.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "items"],
+      "properties": {
+        "type": { "const": "self-rating" },
+        "id": { "$ref": "#/$defs/sectionId" },
+        "title": { "type": "string" },
+        "intro": { "type": "string" },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "text", "max"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "text": { "type": "string", "minLength": 1 },
+              "max": { "type": "integer", "minimum": 2, "description": "Top of the rating range (1..max)." },
+              "anchors": {
+                "type": "array",
+                "description": "Optional labels for the rating range.",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "selectAndCommitSection": {
+      "description": "Student selects from offered options and commits. Used by the aspirational learner-profile module. No scoring. Options may map to an official IB attribute so each reframe stays defensible.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "prompt", "options"],
+      "properties": {
+        "type": { "const": "select-and-commit" },
+        "id": { "$ref": "#/$defs/sectionId" },
+        "title": { "type": "string" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "min_select": { "type": "integer", "minimum": 0 },
+        "max_select": { "type": "integer", "minimum": 1 },
+        "options": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "label"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "label": { "type": "string", "minLength": 1 },
+              "ib_attribute": {
+                "type": "string",
+                "description": "Official IB learner-profile attribute this option maps back to (keeps subversive reframes defensible to colleagues/parents)."
+              },
+              "reframe": {
+                "type": "string",
+                "description": "Optional 'subversive then constructive' framing copy for this option."
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "freeReflectionSection": {
+      "description": "An open writing prompt. The student authors the meaning; their text becomes the student_snapshot stored in the record (DESIGN.md read-out model C). No machine-generated prose about the person.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id", "prompt"],
+      "properties": {
+        "type": { "const": "free-reflection" },
+        "id": { "$ref": "#/$defs/sectionId" },
+        "title": { "type": "string" },
+        "prompt": { "type": "string", "minLength": 1 },
+        "placeholder": { "type": "string" },
+        "is_snapshot": {
+          "type": "boolean",
+          "description": "If true, this section's text is the canonical student_snapshot for the record. At most one per instrument."
+        }
+      }
+    },
+
+    "sectionId": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$",
+      "description": "Section id, unique within the instrument."
+    }
+  }
+}

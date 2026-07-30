@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://personal-inventory.local/schema/vault-record.schema.json",
+  "title": "Vault Record",
+  "description": "One instrument-sitting, written as an append-only file in the student's private SharePoint folder (DESIGN.md). The folder location is the identity, so the record carries NO PII (data-minimisation). `additionalProperties:false` locks the top-level shape; a deeper PII scan is a Layer-1 gate. Every section type emits this one format: scored sections populate scores/bands/readout, aspirational sections leave them empty and live in raw_responses + student_snapshot. The `scores-only` variant omits raw_responses (DESIGN.md escape hatch, engine flag).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["instrument_id", "instrument_version", "timestamp", "variant", "scores", "bands", "readout", "student_snapshot"],
+  "properties": {
+    "instrument_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Matches the definition's id. Used by the viewer to group records by instrument."
+    },
+    "instrument_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "The definition version this sitting was scored against (enables honest longitudinal comparison)."
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ISO 8601 datetime, PASSED IN by the client at save time — never generated server-side (there is no server). Drives the 'In August of DP1, I tended toward…' framing and the longitudinal view."
+    },
+    "variant": {
+      "type": "string",
+      "enum": ["full", "scores-only"],
+      "description": "`full` includes raw_responses; `scores-only` omits them (DPO escape hatch). The engine sets this from its scores-only flag. Enforced below via if/then."
+    },
+    "raw_responses": {
+      "type": "object",
+      "description": "Per-item / per-section raw inputs, keyed by item or section id (NOT by anything identifying the student). Present only in the `full` variant. Values: number (Likert / self-rating), string (free text), array of option ids (select-and-commit), or boolean.",
+      "additionalProperties": {
+        "anyOf": [
+          { "type": "number" },
+          { "type": "string" },
+          { "type": "boolean" },
+          { "type": "null" },
+          { "type": "array", "items": { "type": ["string", "number"] } }
+        ]
+      }
+    },
+    "scores": {
+      "type": "object",
+      "description": "Summed (reverse-keyed) score per scale id. Empty object {} for unscored/aspirational instruments.",
+      "additionalProperties": { "type": "number" }
+    },
+    "bands": {
+      "type": "object",
+      "description": "Assigned band id per scale id (criterion-referenced). Empty object {} for unscored/aspirational instruments.",
+      "additionalProperties": { "type": "string" }
+    },
+    "readout": {
+      "type": "array",
+      "description": "Snapshot of the TAUGHT read-out the engine rendered (so the record is self-explanatory later). One entry per scale shown. Empty array [] for unscored instruments. This is neutral teaching copy + the student's own band — never machine-authored prose about the person.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scale", "band", "construct_explainer", "light", "shadow", "one_thing_to_try"],
+        "properties": {
+          "scale": { "type": "string", "minLength": 1 },
+          "scale_name": { "type": "string" },
+          "band": { "type": "string", "minLength": 1 },
+          "construct_explainer": { "type": "string" },
+          "light": { "type": "string" },
+          "shadow": { "type": "string" },
+          "one_thing_to_try": { "type": "string" }
+        }
+      }
+    },
+    "student_snapshot": {
+      "type": "string",
+      "description": "The student-authored synthesis (which fits / which doesn't / what they'll do) plus any committed selections rendered as their own words. This is the ONLY interpretive prose in the record, and the student wrote it. May be empty string if the student skipped authoring, but the field is always present."
+    }
+  },
+  "if": {
+    "properties": { "variant": { "const": "full" } }
+  },
+  "then": {
+    "required": ["raw_responses"],
+    "description": "A `full` record must carry raw_responses."
+  },
+  "else": {
+    "not": { "required": ["raw_responses"] },
+    "description": "A `scores-only` record must NOT carry raw_responses."
+  }
+}

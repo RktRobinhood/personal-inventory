@@ -1,0 +1,111 @@
+{
+  "id": "grit",
+  "version": "1.0.0",
+  "title": "Grit",
+  "source": "Short Grit Scale (Grit-S), 8 items. Items transcribed verbatim; see content-sources/grit.md.",
+  "citation": "Duckworth, A. L., & Quinn, P. D. (2009). Development and validation of the Short Grit Scale (Grit–S). Journal of Personality Assessment, 91(2), 166–174.",
+  "license": "© Angela Duckworth. Not public domain; made freely available by the author for research and educational (non-commercial) use. See REVIEW.md Layer-2 licensing note.",
+  "intro": "These eight questions look at two sides of grit: keeping effort going, and keeping interest steady over time. Nothing here is a grade or a verdict — it is a mirror. Notice where your answers lean.",
+  "sections": [
+    {
+      "type": "info",
+      "id": "intro",
+      "title": "Before you start",
+      "body": "Answer for how things have actually been lately, not how you think they should be. There are no right answers, and a higher or lower lean is not better or worse — each has a light side and a shadow."
+    },
+    {
+      "type": "scored-likert",
+      "id": "main",
+      "anchors": ["Not like me at all", "Not much like me", "Somewhat like me", "Mostly like me", "Very much like me"],
+      "band_thresholds": { "bands": ["low", "balanced", "high"], "cuts": [0.3333, 0.6667] },
+      "items": [
+        { "text": "New ideas and projects sometimes distract me from previous ones.", "scale": "consistency_of_interest", "reverse": true, "points": 5 },
+        { "text": "Setbacks don't discourage me.", "scale": "perseverance_of_effort", "reverse": false, "points": 5 },
+        { "text": "I have been obsessed with a certain idea or project for a short time but later lost interest.", "scale": "consistency_of_interest", "reverse": true, "points": 5 },
+        { "text": "I am a hard worker.", "scale": "perseverance_of_effort", "reverse": false, "points": 5 },
+        { "text": "I often set a goal but later choose to pursue a different one.", "scale": "consistency_of_interest", "reverse": true, "points": 5 },
+        { "text": "I have difficulty maintaining my focus on projects that take more than a few months to complete.", "scale": "consistency_of_interest", "reverse": true, "points": 5 },
+        { "text": "I finish whatever I begin.", "scale": "perseverance_of_effort", "reverse": false, "points": 5 },
+        { "text": "I am diligent.", "scale": "perseverance_of_effort", "reverse": false, "points": 5 }
+      ],
+      "scales": [
+        {
+          "id": "grit",
+          "name": "Overall grit",
+          "construct_explainer": "Grit combines perseverance of effort with consistency of interest — a tendency to pursue long-term goals with sustained effort and steady focus. Research links it to finishing demanding work, though it overlaps heavily with conscientiousness and is one ingredient of achievement among many. It is not a measure of worth.",
+          "bands": {
+            "low": {
+              "light": "A lower overall lean often goes with flexibility and a readiness to change direction when something stops being worthwhile.",
+              "shadow": "It can also show up as long goals that stall before they are finished.",
+              "one_thing_to_try": "Pick one goal that genuinely matters and protect a small, regular slot of time for it this week."
+            },
+            "balanced": {
+              "light": "A balanced lean tends to hold goals steadily while staying open to changing course.",
+              "shadow": "It can swing with mood, motivation, or how heavy the week is.",
+              "one_thing_to_try": "Name the one long-term goal you most want to protect this term, and write down why."
+            },
+            "high": {
+              "light": "A higher overall lean often goes with sticking to long-term goals through difficulty and boredom.",
+              "shadow": "A strong lean can tip into stubbornness, or into pushing past real limits instead of resting.",
+              "one_thing_to_try": "Check that your steadiest goal is still one you would actively choose today, not just a habit."
+            }
+          }
+        },
+        {
+          "id": "perseverance_of_effort",
+          "name": "Perseverance of effort",
+          "parent": "grit",
+          "construct_explainer": "Perseverance of effort describes a tendency to keep working toward goals despite setbacks, effort, and tedium. It is one of the two facets of grit.",
+          "bands": {
+            "low": {
+              "light": "Answers leaning lower here can reflect a willingness to ease off goals that have stopped being worth the effort.",
+              "shadow": "A lower lean can also show as projects left unfinished once the early energy fades.",
+              "one_thing_to_try": "Choose one current project and name the smallest next step that could be finished this week."
+            },
+            "balanced": {
+              "light": "A balanced lean tends to mix sticking with things and knowing when to rest.",
+              "shadow": "It can wobble under a heavy week, tipping toward either stopping or grinding.",
+              "one_thing_to_try": "Notice which way the tipping goes when tired, and plan one small support for that moment."
+            },
+            "high": {
+              "light": "Answers leaning higher often go with finishing what was started, even when it gets dull.",
+              "shadow": "A strong lean can make it hard to drop a goal that no longer serves, or to take a real break.",
+              "one_thing_to_try": "Name one goal worth questioning, and ask whether continuing is a deliberate choice or just momentum."
+            }
+          }
+        },
+        {
+          "id": "consistency_of_interest",
+          "name": "Consistency of interest",
+          "parent": "grit",
+          "construct_explainer": "Consistency of interest describes a tendency to stay focused on the same goals over long stretches rather than frequently switching. It is the second facet of grit, scored so that frequent switching lowers the score.",
+          "bands": {
+            "low": {
+              "light": "A lower lean can reflect curiosity and openness to following new directions.",
+              "shadow": "It can also show as starting many things and changing course before they mature.",
+              "one_thing_to_try": "Choose one interest to protect from switching for the next month and see what grows."
+            },
+            "balanced": {
+              "light": "A balanced lean tends to blend steady focus with room to explore.",
+              "shadow": "It may drift when a more exciting option appears.",
+              "one_thing_to_try": "Before switching projects, write one line on what would be lost by leaving the current one."
+            },
+            "high": {
+              "light": "Answers leaning higher often go with deep, sustained focus on chosen goals.",
+              "shadow": "A strong lean can make it hard to let go of a path that has stopped fitting.",
+              "one_thing_to_try": "Revisit one long-held goal and check that it still matches what matters now."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "type": "free-reflection",
+      "id": "synthesis",
+      "title": "Your turn",
+      "prompt": "Looking at the two facets and your overall lean: which part fits, which does not, and what is one small thing you want to try? Write it in your own words.",
+      "placeholder": "In my own words…",
+      "is_snapshot": true
+    }
+  ]
+}

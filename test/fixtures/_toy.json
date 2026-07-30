@@ -1,0 +1,38 @@
+{
+  "instrument": "toy",
+  "definition": "test/_toy-definition.json",
+  "cases": [
+    {
+      "name": "all-high",
+      "responses": { "main#0": 4, "main#1": 0, "main#2": 4, "main#3": 0 },
+      "expect": {
+        "scores": { "optimism": 8, "calm": 8, "wellbeing": 16 },
+        "bands": { "optimism": "high", "calm": "high", "wellbeing": "high" }
+      }
+    },
+    {
+      "name": "all-low",
+      "responses": { "main#0": 0, "main#1": 4, "main#2": 0, "main#3": 4 },
+      "expect": {
+        "scores": { "optimism": 0, "calm": 0, "wellbeing": 0 },
+        "bands": { "optimism": "low", "calm": "low", "wellbeing": "low" }
+      }
+    },
+    {
+      "name": "balanced-middle",
+      "responses": { "main#0": 2, "main#1": 2, "main#2": 1, "main#3": 1 },
+      "expect": {
+        "scores": { "optimism": 4, "calm": 4, "wellbeing": 8 },
+        "bands": { "optimism": "balanced", "calm": "balanced", "wellbeing": "balanced" }
+      }
+    },
+    {
+      "name": "mixed-optimism-high-calm-low",
+      "responses": { "main#0": 4, "main#1": 0, "main#2": 0, "main#3": 4 },
+      "expect": {
+        "scores": { "optimism": 8, "calm": 0, "wellbeing": 8 },
+        "bands": { "optimism": "high", "calm": "low", "wellbeing": "balanced" }
+      }
+    }
+  ]
+}

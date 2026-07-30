@@ -1,0 +1,29 @@
+{
+  "instrument_id": "growth-mindset",
+  "instrument_version": "1.0.0",
+  "timestamp": "2028-05-15T10:00:00Z",
+  "variant": "full",
+  "scores": {
+    "growth_mindset": 14
+  },
+  "bands": {
+    "growth_mindset": "growth-lean"
+  },
+  "readout": [
+    {
+      "scale": "growth_mindset",
+      "scale_name": "Mindset about intelligence",
+      "band": "growth-lean",
+      "construct_explainer": "An implicit theory of intelligence is a belief about whether ability is mostly fixed or can grow with effort and strategy. These beliefs relate to how people respond to difficulty, and — unlike a trait — they can shift over time. This is a snapshot of a current belief, not a permanent label. (Higher = more disagreement with the fixed statements = a more growth-leaning view.)",
+      "light": "A lean toward 'ability can grow' often comes with treating difficulty as part of learning rather than a verdict.",
+      "shadow": "A strong lean can underplay real constraints, or turn into pressure to always be improving.",
+      "one_thing_to_try": "Pick one area where 'good enough for now' is fine, and notice that not everything has to be a growth project."
+    }
+  ],
+  "student_snapshot": "Two years on, I see ability as more changeable than I did.",
+  "raw_responses": {
+    "main#0": 5,
+    "main#1": 4,
+    "main#2": 5
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "instrument_id": "grit",
+  "instrument_version": "1.0.0",
+  "timestamp": "2026-08-20T09:00:00Z",
+  "variant": "full",
+  "scores": {
+    "consistency_of_interest": 16,
+    "perseverance_of_effort": 16,
+    "grit": 32
+  },
+  "bands": {
+    "consistency_of_interest": "high",
+    "perseverance_of_effort": "high",
+    "grit": "high"
+  },
+  "readout": [
+    {
+      "scale": "grit",
+      "scale_name": "Overall grit",
+      "band": "high",
+      "construct_explainer": "Grit combines perseverance of effort with consistency of interest — a tendency to pursue long-term goals with sustained effort and steady focus. Research links it to finishing demanding work, though it overlaps heavily with conscientiousness and is one ingredient of achievement among many. It is not a measure of worth.",
+      "light": "A higher overall lean often goes with sticking to long-term goals through difficulty and boredom.",
+      "shadow": "A strong lean can tip into stubbornness, or into pushing past real limits instead of resting.",
+      "one_thing_to_try": "Check that your steadiest goal is still one you would actively choose today, not just a habit."
+    },
+    {
+      "scale": "perseverance_of_effort",
+      "scale_name": "Perseverance of effort",
+      "band": "high",
+      "construct_explainer": "Perseverance of effort describes a tendency to keep working toward goals despite setbacks, effort, and tedium. It is one of the two facets of grit.",
+      "light": "Answers leaning higher often go with finishing what was started, even when it gets dull.",
+      "shadow": "A strong lean can make it hard to drop a goal that no longer serves, or to take a real break.",
+      "one_thing_to_try": "Name one goal worth questioning, and ask whether continuing is a deliberate choice or just momentum."
+    },
+    {
+      "scale": "consistency_of_interest",
+      "scale_name": "Consistency of interest",
+      "band": "high",
+      "construct_explainer": "Consistency of interest describes a tendency to stay focused on the same goals over long stretches rather than frequently switching. It is the second facet of grit, scored so that frequent switching lowers the score.",
+      "light": "Answers leaning higher often go with deep, sustained focus on chosen goals.",
+      "shadow": "A strong lean can make it hard to let go of a path that has stopped fitting.",
+      "one_thing_to_try": "Revisit one long-held goal and check that it still matches what matters now."
+    }
+  ],
+  "student_snapshot": "I stick with things but switch interests a lot — I will protect one project.",
+  "raw_responses": {
+    "main#0": 0,
+    "main#1": 4,
+    "main#2": 0,
+    "main#3": 4,
+    "main#4": 0,
+    "main#5": 0,
+    "main#6": 4,
+    "main#7": 4
+  }
+}
