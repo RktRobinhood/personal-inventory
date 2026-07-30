@@ -71,6 +71,41 @@
     "student_snapshot": {
       "type": "string",
       "description": "The student-authored synthesis (which fits / which doesn't / what they'll do) plus any committed selections rendered as their own words. This is the ONLY interpretive prose in the record, and the student wrote it. May be empty string if the student skipped authoring, but the field is always present."
+    },
+    "administration": {
+      "type": "object",
+      "description": "Optional auditable administration metadata for dynamically assembled item-bank forms.",
+      "additionalProperties": false,
+      "required": ["mode", "form_seed", "bank_size", "form_length", "elapsed_seconds", "interruptions", "skipped_items", "palette_order", "item_order", "item_parameters", "reused_items", "raw_correct", "theta", "theta_standard_error", "test_information"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["standard-untimed", "timed-challenge"] },
+        "form_seed": { "type": "string", "minLength": 1 },
+        "bank_size": { "type": "integer", "minimum": 1 },
+        "form_length": { "type": "integer", "minimum": 1 },
+        "elapsed_seconds": { "type": "integer", "minimum": 0 },
+        "interruptions": { "type": "integer", "minimum": 0 },
+        "skipped_items": { "type": "array", "items": { "type": "string" } },
+        "palette_order": { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 19 } },
+        "item_order": { "type": "array", "items": { "type": "string" } },
+        "item_parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["difficulty", "discrimination", "rules"],
+            "properties": {
+              "difficulty": { "type": "number" },
+              "discrimination": { "type": "number", "exclusiveMinimum": 0 },
+              "rules": { "type": "integer", "minimum": 1 }
+            }
+          }
+        },
+        "reused_items": { "type": "integer", "minimum": 0 },
+        "raw_correct": { "type": "integer", "minimum": 0 },
+        "theta": { "type": "number" },
+        "theta_standard_error": { "type": "number", "minimum": 0 },
+        "test_information": { "type": "number", "minimum": 0 }
+      }
     }
   },
   "if": {

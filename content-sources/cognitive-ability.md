@@ -25,18 +25,23 @@ https://www.icar-project.org/
 
 ## What is implemented
 
-- The 22 unique items assigned to OMIB Set 1 in the authors' `Item Data.xlsx`.
-- The authors' exact 20-bit item codes and published solution keys.
-- The published 2PL difficulty (`b`) and discrimination (`a`) parameters,
-  retained as provenance metadata.
+- All 220 items in the authors' `Item Data.xlsx`, including exact 20-bit item
+  codes and published solution keys.
+- The published 2PL difficulty (`b`) and discrimination (`a`) parameters for
+  the 219 fitting items. The one misfitting item is retained for complete
+  provenance but excluded from scored forms.
+- Two fixed, non-scored practice items with corrective feedback.
+- A seeded 28-item scored form balanced by rule count and difficulty, with
+  previously unseen items preferred across repeat sittings.
 - The construction response format: students select every visual element that
   makes up the missing bottom-right tile.
-- Exact-match raw scoring, as described in the source materials.
+- Exact-match item scoring plus a 2PL expected-a-posteriori estimate and
+  uncertainty for cross-form comparison.
 
-The source validation forms also contained six common anchor items for test
-equating. Those anchors are not part of the 22-item classroom form here.
-Consequently, this implementation must not be described as a reproduction of a
-complete 28-item validation form.
+The six anchors in the source study linked the original calibration samples.
+They are not required when scoring new forms against the already-published
+parameters. The dynamically assembled classroom form is not claimed to
+reproduce one of the original linked forms.
 
 ## Interpretation limits
 

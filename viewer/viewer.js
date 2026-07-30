@@ -47,6 +47,8 @@ export function aggregateRecords(records) {
           score,
           band: (r.bands || {})[scale],
           instrument_version: r.instrument_version,
+          administration_mode: r.administration?.mode || 'legacy',
+          metric: r.administration?.theta != null ? 'theta' : 'raw',
         });
       }
       if (typeof r.student_snapshot === 'string' && r.student_snapshot.trim() !== '') {
@@ -88,6 +90,8 @@ export function scaleChange(series) {
   const last = series[series.length - 1];
   if (first.instrument_version && last.instrument_version &&
       first.instrument_version !== last.instrument_version) return null;
+  if (first.administration_mode && last.administration_mode &&
+      first.administration_mode !== last.administration_mode) return null;
   return {
     from: { timestamp: first.timestamp, score: first.score, band: first.band },
     to: { timestamp: last.timestamp, score: last.score, band: last.band },

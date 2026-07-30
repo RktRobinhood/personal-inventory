@@ -134,7 +134,7 @@ export function createEngine(definition, ctx, options = {}) {
     'learner-profile': '8–12',
     'self-efficacy': '2–4',
     strengths: '25–35',
-    'cognitive-ability': '20–30',
+    'cognitive-ability': '25–35',
   }[definition.id] || String(Math.max(2, Math.round(itemCount / 10)));
   const hero = h(doc, 'header', { class: 'pi-instrument__hero' }, [
     h(doc, 'p', { class: 'pi-eyebrow', text: scored ? 'A private self-check' : 'A guided reflection' }),

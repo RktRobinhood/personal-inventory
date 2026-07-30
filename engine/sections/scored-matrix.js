@@ -54,7 +54,7 @@ export function render(section, ctx) {
   return { el, read };
 }
 
-function drawCode(doc, code, className) {
+export function drawCode(doc, code, className) {
   const svg = svgNode(doc, 'svg', { viewBox: '0 0 100 100', class: className, 'aria-hidden': 'true' });
   [...code].forEach((bit, index) => {
     if (bit === '1') drawInto(doc, svg, index);
@@ -62,7 +62,7 @@ function drawCode(doc, code, className) {
   return svg;
 }
 
-function drawElement(doc, index, className) {
+export function drawElement(doc, index, className) {
   const svg = svgNode(doc, 'svg', { viewBox: '0 0 100 100', class: className, 'aria-hidden': 'true' });
   drawInto(doc, svg, index);
   return svg;

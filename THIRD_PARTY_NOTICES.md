@@ -2,9 +2,10 @@
 
 ## Open Matrices Item Bank
 
-The Figural Reasoning instrument uses item codes, published solutions,
-calibration parameters, and a construction-element response design from the
-Open Matrices Item Bank (OMIB):
+The Figural Reasoning instrument embeds the complete bank of 220 item codes and
+published solutions, including the published calibration parameters for the
+219 fitting items and the construction-element response design from the Open
+Matrices Item Bank (OMIB):
 
 Koch, M., Spinath, F. M., Greiff, S., & Becker, N. (2022). *Development and
 Validation of the Open Matrices Item Bank*. Journal of Intelligence, 10(3), 41.

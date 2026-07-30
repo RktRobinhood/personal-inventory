@@ -12,6 +12,9 @@ const INSTRUMENT_NAMES = {
   'cognitive-ability': 'Figural Reasoning',
 };
 const INSTRUMENT_ORDER = Object.keys(INSTRUMENT_NAMES);
+const INSTRUMENT_PATHS = Object.fromEntries(
+  INSTRUMENT_ORDER.map((id) => [id, `../instruments/${id}.html`]),
+);
 const BAND_POSITION = {
   low: 16.667,
   'building-range': 16.667,
@@ -93,6 +96,14 @@ export function mountPortraitViewer(ctx = {}) {
     out.replaceChildren();
     if (portrait.total === 0) {
       out.appendChild(renderEmptyState());
+      out.appendChild(el('div', { class: 'pi-section-heading pi-reveal' }, [
+        el('div', {}, [
+          el('p', { class: 'pi-kicker', text: 'The seven lenses' }),
+          el('h2', { text: 'Your complete inventory map' }),
+        ]),
+        el('p', { text: 'Every inventory has a place here. Start with any lens and this map will fill in automatically.' }),
+      ]));
+      out.appendChild(renderInstrumentGrid(portrait));
       return;
     }
 
@@ -104,15 +115,32 @@ export function mountPortraitViewer(ctx = {}) {
         el('p', { class: 'pi-kicker', text: 'The individual lenses' }),
         el('h2', { text: 'Patterns and movement' }),
       ]),
-      el('p', { text: 'Dots show where each result band sits. When you repeat an inventory, the line connects your first and latest result and the exact raw-score change appears beside it.' }),
+      el('p', { text: 'Dots show where each result band sits. When you repeat an inventory under compatible scoring conditions, the line connects the first and latest result and the comparable-score change appears beside it.' }),
     ]);
     out.appendChild(heading);
 
-    const grid = el('div', { class: 'pi-portrait-grid' });
-    for (const instrument of portrait.instruments) grid.appendChild(renderInstrument(instrument, portrait));
-    out.appendChild(grid);
+    out.appendChild(renderInstrumentGrid(portrait));
 
     if (portrait.snapshots.length) out.appendChild(renderReflectionArchive(portrait.snapshots));
+  }
+
+  function renderInstrumentGrid(portrait) {
+    const grid = el('div', { class: 'pi-portrait-grid' });
+    const instrumentsById = new Map(
+      portrait.instruments.map((instrument) => [instrument.instrument_id, instrument]),
+    );
+    for (const id of INSTRUMENT_ORDER) {
+      const instrument = instrumentsById.get(id);
+      grid.appendChild(instrument
+        ? renderInstrument(instrument, portrait)
+        : renderMissingInstrument(id));
+    }
+    for (const instrument of portrait.instruments) {
+      if (!INSTRUMENT_ORDER.includes(instrument.instrument_id)) {
+        grid.appendChild(renderInstrument(instrument, portrait));
+      }
+    }
+    return grid;
   }
 
   function renderEmptyState() {
@@ -244,7 +272,11 @@ export function mountPortraitViewer(ctx = {}) {
     const scaleNames = scaleNameMap(instrument.latest);
     const comparableLongitudinal = Object.fromEntries(
       Object.entries(instrument.longitudinal)
-        .map(([id, series]) => [id, currentVersionSeries(series, instrument.latest.instrument_version)])
+        .map(([id, series]) => [id, currentVersionSeries(
+          series,
+          instrument.latest.instrument_version,
+          instrument.latest.administration?.mode || 'legacy',
+        )])
         .filter(([, series]) => series.length),
     );
     const scales = Object.keys(comparableLongitudinal);
@@ -278,6 +310,30 @@ export function mountPortraitViewer(ctx = {}) {
     return card;
   }
 
+  function renderMissingInstrument(id) {
+    return el('article', { class: 'pi-portrait-card pi-portrait-card--missing pi-reveal' }, [
+      el('header', { class: 'pi-portrait-card__header' }, [
+        el('div', {}, [
+          el('p', { class: 'pi-card__number', text: 'NOT COMPLETED' }),
+          el('h2', { text: nameFor(id) }),
+        ]),
+        el('span', { class: 'pi-portrait-card__empty-mark', 'aria-hidden': 'true', text: '○' }),
+      ]),
+      el('div', { class: 'pi-portrait-card__empty-copy' }, [
+        el('p', {
+          text: id === 'learner-profile'
+            ? 'Your selected learner attributes and commitment will appear here after the reflection.'
+            : 'Complete this lens to add its pattern to the portrait. Repeat it later to make change visible.',
+        }),
+        el('a', {
+          class: 'pi-btn',
+          href: INSTRUMENT_PATHS[id],
+          text: `Start ${nameFor(id)} →`,
+        }),
+      ]),
+    ]);
+  }
+
   function renderBandGraph(ids, longitudinal, names) {
     const graph = el('div', { class: 'pi-band-graph' });
     graph.appendChild(el('div', { class: 'pi-band-graph__axis', 'aria-hidden': 'true' }, [
@@ -308,7 +364,11 @@ export function mountPortraitViewer(ctx = {}) {
       row.appendChild(el('span', {
         class: `pi-graph-delta${change && change.delta !== 0 ? ' has-change' : ''}`,
         text: change ? `${change.delta > 0 ? '+' : ''}${change.delta}` : '',
-        title: change ? 'Raw-score change from first to latest sitting' : '',
+        title: change
+          ? (series[0]?.metric === 'theta'
+            ? 'Calibrated OMIB theta change from first to latest compatible sitting'
+            : 'Raw-score change from first to latest compatible sitting')
+          : '',
       }));
       graph.appendChild(row);
     }
@@ -338,7 +398,9 @@ export function mountPortraitViewer(ctx = {}) {
         row.appendChild(el('span', {
           class: 'pi-delta',
           text: `${change.delta > 0 ? '+' : ''}${change.delta}`,
-          title: 'Change in raw score between the first and latest sitting',
+          title: series[0]?.metric === 'theta'
+            ? 'Change in calibrated OMIB theta between compatible sittings'
+            : 'Change in raw score between compatible sittings',
         }));
       }
       list.appendChild(row);
@@ -458,7 +520,8 @@ function primaryScaleIds(record) {
   return all;
 }
 
-function currentVersionSeries(series, version) {
+function currentVersionSeries(series, version, mode) {
   if (!Array.isArray(series) || !series.length) return [];
-  return series.filter((point) => point.instrument_version === version);
+  return series.filter((point) =>
+    point.instrument_version === version && point.administration_mode === mode);
 }

@@ -185,6 +185,212 @@ function scoreInstrument(definition, responses) {
 return { reverseKey, responseKey, assignBand, scoreInstrument };
 });
 
+__def("engine/irt.js", function(__req){
+/**
+ * 2PL expected-a-posteriori estimate on a standard-normal prior.
+ * This puts different random OMIB forms on their published common scale.
+ * It is an item-bank estimate with uncertainty, never an IQ or percentile.
+ */
+function estimate2pl(items, responses, options = {}) {
+  const minimum = options.minimum ?? -4;
+  const maximum = options.maximum ?? 4;
+  const step = options.step ?? 0.05;
+  const points = [];
+  let peak = -Infinity;
+
+  for (let theta = minimum; theta <= maximum + step / 2; theta += step) {
+    let logWeight = -0.5 * theta * theta; // standard-normal log prior, constant omitted
+    for (const item of items) {
+      const correct = responses[item.id] === item.solution ? 1 : 0;
+      const probability = logistic(item.discrimination * (theta - item.difficulty));
+      logWeight += correct
+        ? Math.log(Math.max(probability, 1e-12))
+        : Math.log(Math.max(1 - probability, 1e-12));
+    }
+    points.push({ theta, logWeight });
+    peak = Math.max(peak, logWeight);
+  }
+
+  let weightSum = 0;
+  let meanSum = 0;
+  for (const point of points) {
+    point.weight = Math.exp(point.logWeight - peak);
+    weightSum += point.weight;
+    meanSum += point.theta * point.weight;
+  }
+  const theta = meanSum / weightSum;
+  let varianceSum = 0;
+  for (const point of points) {
+    varianceSum += ((point.theta - theta) ** 2) * point.weight;
+  }
+  const posteriorSe = Math.sqrt(varianceSum / weightSum);
+  const information = items.reduce((total, item) => {
+    const probability = logistic(item.discrimination * (theta - item.difficulty));
+    return total + item.discrimination ** 2 * probability * (1 - probability);
+  }, 0);
+  return {
+    theta,
+    standardError: posteriorSe,
+    information,
+    correct: items.filter((item) => responses[item.id] === item.solution).length,
+    total: items.length,
+  };
+}
+
+function logistic(value) {
+  if (value >= 0) return 1 / (1 + Math.exp(-value));
+  const exp = Math.exp(value);
+  return exp / (1 + exp);
+}
+
+return { estimate2pl };
+});
+
+__def("engine/matrix-form.js", function(__req){
+/**
+ * Pure, deterministic form construction for a large calibrated matrix bank.
+ * A seed reproduces the same form; exclusions reduce repeat exposure until the
+ * bank is exhausted. Items are sampled across rule-count and difficulty strata.
+ */
+
+function createMatrixForm(section, options = {}) {
+  const config = section.form || {};
+  const practiceIds = new Set(config.practice_ids || []);
+  const eligibleItems = section.items.filter((item) =>
+    item.calibrated !== false && !practiceIds.has(item.id));
+  const length = Math.min(config.length || 28, eligibleItems.length);
+  const seed = String(options.seed || 'personal-inventory');
+  const random = seededRandom(seed);
+  const excluded = new Set(options.excludeIds || []);
+  const targets = normalizedTargets(config.rule_targets, length);
+  const selected = [];
+
+  for (const [ruleText, target] of Object.entries(targets)) {
+    const rules = Number(ruleText);
+    const group = eligibleItems.filter((item) => item.rules === rules);
+    const fresh = group.filter((item) => !excluded.has(item.id));
+    const old = group.filter((item) => excluded.has(item.id));
+    selected.push(...difficultySample(fresh, Math.min(target, fresh.length), random));
+    if (selected.filter((item) => item.rules === rules).length < target) {
+      const used = new Set(selected.map((item) => item.id));
+      const fallback = old.filter((item) => !used.has(item.id));
+      const needed = target - selected.filter((item) => item.rules === rules).length;
+      selected.push(...difficultySample(fallback, needed, random));
+    }
+  }
+
+  if (selected.length < length) {
+    const used = new Set(selected.map((item) => item.id));
+    const remaining = eligibleItems.filter((item) => !used.has(item.id));
+    selected.push(...difficultySample(
+      remaining.filter((item) => !excluded.has(item.id)),
+      length - selected.length,
+      random,
+    ));
+  }
+  if (selected.length < length) {
+    const used = new Set(selected.map((item) => item.id));
+    selected.push(...difficultySample(
+      eligibleItems.filter((item) => !used.has(item.id)),
+      length - selected.length,
+      random,
+    ));
+  }
+
+  // Preserve a broad easy-to-hard arc, but randomize within five difficulty
+  // blocks. This prevents a memorisable order without front-loading the hardest
+  // problems and distorting the experience.
+  const ordered = selected.slice(0, length).sort((a, b) => a.difficulty - b.difficulty);
+  const blockSize = Math.ceil(ordered.length / 5);
+  const items = [];
+  for (let index = 0; index < ordered.length; index += blockSize) {
+    items.push(...shuffle(ordered.slice(index, index + blockSize), random));
+  }
+
+  // The construction elements are not multiple-choice answers. Their fixed
+  // semantic/spatial order is part of the validated response interface.
+  const paletteOrder = Array.from({ length: 20 }, (_, index) => index);
+  return {
+    section: { ...section, items },
+    practiceItems: section.items.filter((item) => practiceIds.has(item.id)),
+    seed,
+    paletteOrder,
+    bankSize: section.items.length,
+    eligibleSize: eligibleItems.length,
+    reused: items.filter((item) => excluded.has(item.id)).length,
+  };
+}
+
+function randomSeed(cryptoApi = globalThis.crypto) {
+  if (cryptoApi?.getRandomValues) {
+    const values = new Uint32Array(4);
+    cryptoApi.getRandomValues(values);
+    return Array.from(values, (value) => value.toString(16).padStart(8, '0')).join('');
+  }
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+function normalizedTargets(input, length) {
+  const source = input && typeof input === 'object'
+    ? Object.fromEntries(Object.entries(input).map(([key, value]) => [key, Number(value)]))
+    : { 1: 3, 2: 6, 3: 10, 4: 6, 5: 3 };
+  const sum = Object.values(source).reduce((total, value) => total + value, 0);
+  if (sum === length) return source;
+  const scaled = Object.entries(source).map(([key, value]) => ({
+    key,
+    exact: (value / sum) * length,
+  }));
+  const result = Object.fromEntries(scaled.map(({ key, exact }) => [key, Math.floor(exact)]));
+  let left = length - Object.values(result).reduce((total, value) => total + value, 0);
+  for (const { key } of scaled.sort((a, b) => (b.exact % 1) - (a.exact % 1))) {
+    if (left-- <= 0) break;
+    result[key]++;
+  }
+  return result;
+}
+
+function difficultySample(items, count, random) {
+  if (count <= 0 || !items.length) return [];
+  const ordered = items.slice().sort((a, b) => a.difficulty - b.difficulty);
+  const result = [];
+  for (let index = 0; index < count; index++) {
+    const start = Math.floor((index / count) * ordered.length);
+    const end = Math.max(start + 1, Math.floor(((index + 1) / count) * ordered.length));
+    const candidates = ordered.slice(start, end).filter((item) => !result.includes(item));
+    const pool = candidates.length ? candidates : ordered.filter((item) => !result.includes(item));
+    if (!pool.length) break;
+    result.push(pool[Math.floor(random() * pool.length)]);
+  }
+  return result;
+}
+
+function shuffle(values, random) {
+  const result = values.slice();
+  for (let index = result.length - 1; index > 0; index--) {
+    const swap = Math.floor(random() * (index + 1));
+    [result[index], result[swap]] = [result[swap], result[index]];
+  }
+  return result;
+}
+
+function seededRandom(seed) {
+  let state = 2166136261;
+  for (const char of seed) {
+    state ^= char.charCodeAt(0);
+    state = Math.imul(state, 16777619);
+  }
+  return () => {
+    state += 0x6D2B79F5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+return { createMatrixForm, randomSeed };
+});
+
 __def("engine/sections/info.js", function(__req){
 /**
  * info.js — teaching / framing block. No input, no scoring.
@@ -381,7 +587,7 @@ function svgNode(doc, tag, attrs) {
   return node;
 }
 
-return { render };
+return { render, drawCode, drawElement };
 });
 
 __def("engine/sections/self-rating.js", function(__req){
@@ -689,7 +895,7 @@ function createEngine(definition, ctx, options = {}) {
     'learner-profile': '8–12',
     'self-efficacy': '2–4',
     strengths: '25–35',
-    'cognitive-ability': '20–30',
+    'cognitive-ability': '25–35',
   }[definition.id] || String(Math.max(2, Math.round(itemCount / 10)));
   const hero = h(doc, 'header', { class: 'pi-instrument__hero' }, [
     h(doc, 'p', { class: 'pi-eyebrow', text: scored ? 'A private self-check' : 'A guided reflection' }),
@@ -1204,11 +1410,19 @@ function mountInstrument(definition, opts = {}) {
   let library = loadLibrary();
 
   const sitebar = el('nav', { class: 'pi-sitebar', 'aria-label': 'Personal Inventory' });
-  const brand = el('a', { class: 'pi-brand', href: '../index.html' });
-  brand.append(el('span', { class: 'pi-brand__mark', 'aria-hidden': 'true' }), el('span', { text: 'Personal Inventory' }));
+  const brand = el('a', { class: 'pi-brand', href: '../index.html#assessments' });
+  brand.append(el('span', { class: 'pi-brand__mark', 'aria-hidden': 'true' }), el('span', { text: '← Assessments' }));
+  const actions = el('div', { class: 'pi-sitebar__actions' });
+  const portraitLinkTop = el('a', { class: 'pi-portrait-nav', href: '../viewer/viewer.html', 'aria-label': 'Open my portrait' });
+  const portraitAvatar = el('span', { class: 'pi-portrait-avatar', 'aria-hidden': 'true' });
+  portraitAvatar.appendChild(el('span'));
+  const portraitCopy = el('span', { class: 'pi-portrait-nav__copy' });
+  portraitCopy.append(el('strong', { text: 'My portrait' }), el('small', { text: 'Saved results' }));
+  portraitLinkTop.append(portraitAvatar, portraitCopy);
   const privacy = el('span', { class: 'pi-privacy' });
   privacy.appendChild(el('span', { text: 'Offline & private' }));
-  sitebar.append(brand, privacy);
+  actions.append(portraitLinkTop, privacy);
+  sitebar.append(brand, actions);
   doc.body.insertBefore(sitebar, doc.body.firstChild);
 
   const formWrap = doc.createElement('div');
@@ -1280,6 +1494,7 @@ function mountInstrument(definition, opts = {}) {
     completed = true;
     dirty = false;
     persistCurrent();
+    celebrateCompletion();
     mountMotion(doc);
     readoutEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
@@ -1352,6 +1567,10 @@ function mountInstrument(definition, opts = {}) {
     const fill = el('div', { class: 'pi-progress__fill' });
     const progressStage = el('span', { class: 'pi-progress__stage', text: 'Your progress' });
     progressCopy.append(progressStage, progressCount);
+    track.setAttribute('role', 'progressbar');
+    track.setAttribute('aria-label', 'Questions answered');
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', String(questionGroups.length));
     track.appendChild(fill);
     progress.append(progressCopy, track, el('p', {
       class: 'pi-progress__shortcut',
@@ -1367,9 +1586,11 @@ function mountInstrument(definition, opts = {}) {
         if (complete) answered++;
       }
       fill.style.width = `${Math.round((answered / questionGroups.length) * 100)}%`;
+      track.setAttribute('aria-valuenow', String(answered));
+      const percent = Math.round((answered / questionGroups.length) * 100);
       progressCount.textContent = answered === questionGroups.length
         ? 'Complete — ready for your read-out'
-        : `${answered} of ${questionGroups.length}`;
+        : `${answered} of ${questionGroups.length} · ${percent}%`;
     };
     engine.el.addEventListener('change', update);
     update();
@@ -1447,6 +1668,24 @@ function mountInstrument(definition, opts = {}) {
     localStatus.className = 'pi-local-status';
   }
 
+  function celebrateCompletion() {
+    const notice = el('div', {
+      class: 'pi-completion-toast',
+      role: 'status',
+      'aria-live': 'polite',
+    });
+    notice.append(
+      el('span', { class: 'pi-completion-toast__check', text: '✓' }),
+      el('span', { text: 'Assessment complete — your read-out is ready.' }),
+    );
+    doc.body.appendChild(notice);
+    requestAnimationFrame(() => notice.classList.add('is-visible'));
+    setTimeout(() => {
+      notice.classList.remove('is-visible');
+      setTimeout(() => notice.remove(), 400);
+    }, 2600);
+  }
+
   function downloadText(text, filename) {
     const blob = new Blob([text], { type: 'application/json' });
     const href = URL.createObjectURL(blob);
@@ -1487,6 +1726,640 @@ function mountInstrument(definition, opts = {}) {
 return { mountInstrument };
 });
 
+__def("instruments/matrix-assessment-page.js", function(__req){
+const { assembleRecord, buildReadout } = __req("engine/engine.js");
+const { scoreInstrument } = __req("engine/scoring.js");
+const { drawCode, drawElement } = __req("engine/sections/scored-matrix.js");
+const { createMatrixForm, randomSeed } = __req("engine/matrix-form.js");
+const { estimate2pl } = __req("engine/irt.js");
+const { manualDownload } = __req("engine/save-adapter.js");
+const { archiveFilename, formatBytes, loadLibrary, saveLibrary, serializeArchive, upsertRecord } = __req("engine/local-store.js");
+const { mountMotion } = __req("engine/motion.js");
+
+const EMPTY_RESPONSE = '00000000000000000000';
+
+function mountMatrixAssessment(definition, opts = {}) {
+  const doc = opts.doc || document;
+  const win = doc.defaultView || window;
+  const root = doc.querySelector(opts.root || '#app');
+  if (!root) throw new Error('Matrix assessment root not found');
+
+  const sourceSection = definition.sections.find((section) => section.type === 'scored-matrix');
+  if (!sourceSection) throw new Error('Matrix assessment has no item bank');
+  const library = loadLibrary();
+  const seenIds = library.state.records
+    .filter((record) => record.instrument_id === definition.id)
+    .flatMap((record) => Object.keys(record.raw_responses || {}))
+    .filter((id) => id.startsWith('omib-'));
+  const form = createMatrixForm(sourceSection, {
+    seed: randomSeed(win.crypto),
+    excludeIds: seenIds,
+  });
+  const formDefinition = {
+    ...definition,
+    sections: definition.sections.map((section) =>
+      section.type === 'scored-matrix' ? form.section : section),
+  };
+  const answers = {};
+  const skipped = [];
+  let current = -1;
+  let timer = 0;
+  let phase = 'welcome';
+  let active = false;
+  let accumulatedTime = 0;
+  let resumedAt = 0;
+  let interruptions = 0;
+  let record = null;
+
+  doc.body.classList.add('pi-matrix-exam-page');
+  const sitebar = makeSitebar();
+  doc.body.insertBefore(sitebar, doc.body.firstChild);
+  renderWelcome();
+  mountMotion(doc);
+
+  win.addEventListener('beforeunload', (event) => {
+    if (!active) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+  win.addEventListener('pagehide', () => {
+    if (record) persistRecord();
+  });
+  doc.addEventListener('visibilitychange', () => {
+    if (!active) return;
+    if (doc.hidden) {
+      accumulatedTime += Date.now() - resumedAt;
+      resumedAt = 0;
+      interruptions++;
+    } else {
+      resumedAt = Date.now();
+    }
+  });
+
+  function renderWelcome() {
+    root.replaceChildren();
+    const hero = el('section', { class: 'pi-exam-welcome pi-reveal' }, [
+      el('div', { class: 'pi-exam-welcome__copy' }, [
+        el('p', { class: 'pi-eyebrow', text: 'Calibrated reasoning lab' }),
+        el('h1', { text: 'Read the pattern. Build the missing piece.' }),
+        el('p', {
+          class: 'pi-exam-welcome__lead',
+          text: `${form.section.items.length} scored puzzles have been drawn from the complete ${form.bankSize}-item bank, preceded by two guided practice puzzles.`,
+        }),
+        el('div', { class: 'pi-exam-specs' }, [
+          spec(String(form.section.items.length), 'balanced scored puzzles'),
+          spec('Untimed', 'standard administration'),
+          spec('220', 'calibrated item bank'),
+          spec(form.reused ? String(form.reused) : '0', 'previously seen'),
+        ]),
+      ]),
+      renderWelcomeArt(),
+    ]);
+    const briefing = el('section', { class: 'pi-exam-briefing pi-reveal' }, [
+      el('div', {}, [
+        el('p', { class: 'pi-kicker', text: 'Before the clock starts' }),
+        el('h2', { text: 'One clean attempt' }),
+      ]),
+      el('ol', { class: 'pi-exam-rules' }, [
+        rule('01', 'Work independently', 'No search, calculator, screenshots, or outside help.'),
+        rule('02', 'Build the whole tile', 'Select every element that belongs in the missing square.'),
+        rule('03', 'Keep moving', 'You cannot return after submitting or skipping a scored puzzle.'),
+        rule('04', 'Read the result carefully', 'This measures figural reasoning—not full-scale IQ or fixed potential.'),
+      ]),
+      el('div', { class: 'pi-exam-start' }, [
+        el('p', {
+          text: 'Choose a quiet moment. Elapsed time pauses when this page is hidden and is recorded only as context.',
+        }),
+        button('Start guided practice', 'pi-btn pi-btn--primary pi-btn--large', startPractice),
+      ]),
+    ]);
+    root.append(hero, briefing);
+  }
+
+  function startPractice() {
+    phase = 'practice';
+    active = false;
+    current = 0;
+    renderExamShell();
+    showItem();
+  }
+
+  function startScored() {
+    phase = 'scored';
+    active = true;
+    accumulatedTime = 0;
+    resumedAt = Date.now();
+    current = 0;
+    renderExamShell();
+    showItem();
+  }
+
+  function renderExamShell() {
+    root.replaceChildren();
+    const shell = el('section', { class: 'pi-exam-shell' });
+    shell.innerHTML = `
+      <header class="pi-exam-toolbar">
+        <div>
+          <span class="pi-exam-toolbar__label">FIGURAL REASONING</span>
+          <strong id="exam-count">Practice 1 / ${form.practiceItems.length}</strong>
+        </div>
+        <div class="pi-exam-timer" role="timer" aria-label="Time remaining">
+          <svg viewBox="0 0 44 44" aria-hidden="true">
+            <circle class="pi-exam-timer__base" cx="22" cy="22" r="18"></circle>
+            <circle id="exam-timer-ring" class="pi-exam-timer__ring" cx="22" cy="22" r="18"></circle>
+          </svg>
+          <span id="exam-time">PRACTICE</span>
+        </div>
+      </header>
+      <div class="pi-exam-progress"><span id="exam-progress-fill"></span></div>
+      <div id="exam-stage" class="pi-exam-stage" tabindex="-1"></div>
+      <footer class="pi-exam-footer">
+        <p id="exam-status" role="status" aria-live="polite">Select the elements that complete the matrix.</p>
+        <div class="pi-exam-footer__actions">
+          <button id="exam-skip" type="button" class="pi-btn pi-btn--quiet">Skip / not sure</button>
+          <button id="exam-next" type="button" class="pi-btn pi-btn--primary" disabled>Check practice answer →</button>
+        </div>
+      </footer>`;
+    root.appendChild(shell);
+    doc.getElementById('exam-next').addEventListener('click', submitCurrent);
+    doc.getElementById('exam-skip').addEventListener('click', () => {
+      if (phase === 'practice') {
+        doc.getElementById('exam-status').textContent = 'Try selecting at least one element during practice.';
+        return;
+      }
+      const item = form.section.items[current];
+      answers[item.id] = EMPTY_RESPONSE;
+      skipped.push(item.id);
+      advanceScored();
+    });
+  }
+
+  function showItem() {
+    clearInterval(timer);
+    const items = phase === 'practice' ? form.practiceItems : form.section.items;
+    const item = items[current];
+    const stage = doc.getElementById('exam-stage');
+    stage.replaceChildren();
+    stage.className = 'pi-exam-stage';
+    void stage.offsetWidth;
+    stage.classList.add('is-entering');
+
+    const matrix = el('div', {
+      class: 'pi-exam-matrix',
+      role: 'img',
+      'aria-label': `Matrix puzzle ${current + 1}`,
+    });
+    item.item_code.split(',').slice(0, 8)
+      .forEach((code) => matrix.appendChild(drawCode(doc, code, 'pi-exam-matrix__cell')));
+    matrix.appendChild(el('div', { class: 'pi-exam-matrix__cell pi-exam-matrix__missing', text: '?' }));
+
+    const selected = new Set();
+    let preview = drawCode(doc, EMPTY_RESPONSE, 'pi-exam-answer-preview__svg');
+    const palette = el('div', {
+      class: 'pi-exam-palette',
+      role: 'group',
+      'aria-label': 'Construction elements',
+    });
+    for (const elementIndex of form.paletteOrder) {
+      const choice = button('', 'pi-exam-element', () => {
+        choice.classList.toggle('is-selected');
+        if (selected.has(elementIndex)) selected.delete(elementIndex);
+        else selected.add(elementIndex);
+        choice.setAttribute('aria-pressed', selected.has(elementIndex) ? 'true' : 'false');
+        const bits = bitsFrom(selected);
+        const nextPreview = drawCode(doc, bits, 'pi-exam-answer-preview__svg');
+        preview.replaceWith(nextPreview);
+        preview = nextPreview;
+        doc.getElementById('exam-next').disabled = selected.size === 0;
+        doc.getElementById('exam-status').textContent = selected.size
+          ? `${selected.size} element${selected.size === 1 ? '' : 's'} selected`
+          : 'Select the elements that complete the matrix.';
+      });
+      choice.setAttribute('aria-label', `Toggle construction element ${elementIndex + 1}`);
+      choice.setAttribute('aria-pressed', 'false');
+      choice.appendChild(drawElement(doc, elementIndex, 'pi-exam-element__svg'));
+      palette.appendChild(choice);
+    }
+
+    stage.append(
+      el('div', { class: 'pi-exam-workbench' }, [
+        el('div', { class: 'pi-exam-puzzle' }, [
+          el('p', {
+            class: 'pi-exam-overline',
+            text: phase === 'practice'
+              ? `Guided practice ${current + 1}`
+              : `Pattern ${String(current + 1).padStart(2, '0')}`,
+          }),
+          matrix,
+        ]),
+        el('div', { class: 'pi-exam-construction' }, [
+          el('div', { class: 'pi-exam-construction__heading' }, [
+            el('div', {}, [
+              el('p', { class: 'pi-exam-overline', text: 'Your construction' }),
+              el('h2', { text: 'Build the missing tile' }),
+            ]),
+            el('div', { class: 'pi-exam-answer-preview' }, [preview]),
+          ]),
+          palette,
+          el('p', {
+            class: 'pi-hint',
+            text: 'The construction elements stay in the validated fixed arrangement throughout.',
+          }),
+        ]),
+      ]),
+    );
+    stage._selected = selected;
+    doc.getElementById('exam-count').textContent = phase === 'practice'
+      ? `Practice ${current + 1} / ${form.practiceItems.length}`
+      : `Puzzle ${current + 1} / ${form.section.items.length}`;
+    doc.getElementById('exam-progress-fill').style.width =
+      phase === 'practice'
+        ? `${((current + 1) / form.practiceItems.length) * 100}%`
+        : `${(current / form.section.items.length) * 100}%`;
+    doc.getElementById('exam-next').disabled = true;
+    doc.getElementById('exam-next').textContent =
+      phase === 'practice' ? 'Check practice answer →' : 'Lock answer →';
+    doc.getElementById('exam-skip').hidden = phase === 'practice';
+    updateElapsed();
+    clearInterval(timer);
+    timer = win.setInterval(updateElapsed, 500);
+    stage.focus({ preventScroll: true });
+  }
+
+  function updateElapsed() {
+    const time = doc.getElementById('exam-time');
+    if (!time) return;
+    time.textContent = phase === 'practice' ? 'PRACTICE' : formatClock(elapsedSeconds());
+  }
+
+  function submitCurrent() {
+    const stage = doc.getElementById('exam-stage');
+    if (phase === 'practice' && stage._practiceReviewed) {
+      if (current >= form.practiceItems.length - 1) startScored();
+      else {
+        current++;
+        showItem();
+      }
+      return;
+    }
+    const selected = stage._selected;
+    if (!selected?.size) return;
+    const item = (phase === 'practice' ? form.practiceItems : form.section.items)[current];
+    const response = bitsFrom(selected);
+    if (phase === 'practice') {
+      showPracticeFeedback(item, response);
+      return;
+    }
+    answers[item.id] = response;
+    advanceScored();
+  }
+
+  function showPracticeFeedback(item, response) {
+    const stage = doc.getElementById('exam-stage');
+    stage._practiceReviewed = true;
+    const correct = response === item.solution;
+    stage.appendChild(el('aside', {
+      class: `pi-exam-feedback ${correct ? 'is-correct' : 'is-learning'}`,
+    }, [
+      el('div', {}, [
+        el('p', { class: 'pi-kicker', text: correct ? 'Correct construction' : 'Compare the construction' }),
+        el('h3', {
+          text: correct
+            ? 'You selected the complete missing tile.'
+            : 'The highlighted tile shows every element required.',
+        }),
+      ]),
+      el('div', { class: 'pi-exam-feedback__answer' }, [
+        drawCode(doc, item.solution, 'pi-exam-answer-preview__svg'),
+      ]),
+    ]));
+    doc.getElementById('exam-status').textContent =
+      'Practice is the only place where correctness feedback is shown.';
+    const next = doc.getElementById('exam-next');
+    next.disabled = false;
+    next.textContent = current >= form.practiceItems.length - 1
+      ? 'Begin scored form →'
+      : 'Next practice puzzle →';
+  }
+
+  function advanceScored() {
+    clearInterval(timer);
+    if (current >= form.section.items.length - 1) {
+      finish();
+      return;
+    }
+    current++;
+    showItem();
+  }
+
+  function finish() {
+    active = false;
+    clearInterval(timer);
+    const timestamp = new Date().toISOString();
+    if (resumedAt) {
+      accumulatedTime += Date.now() - resumedAt;
+      resumedAt = 0;
+    }
+    const workingSeconds = Math.round(accumulatedTime / 1000);
+    const scored = scoreInstrument(formDefinition, answers);
+    const irt = estimate2pl(form.section.items, answers);
+    const readout = buildReadout(formDefinition, scored.bands);
+    record = assembleRecord(formDefinition, {
+      responses: answers,
+      scores: { 'figural-reasoning': Number(irt.theta.toFixed(3)) },
+      bands: scored.bands,
+      readout,
+      snapshot: '',
+      timestamp,
+    });
+    record.administration = {
+      mode: 'standard-untimed',
+      form_seed: form.seed,
+      bank_size: form.bankSize,
+      form_length: form.section.items.length,
+      elapsed_seconds: workingSeconds,
+      interruptions,
+      skipped_items: skipped.slice(),
+      palette_order: form.paletteOrder.slice(),
+      item_order: form.section.items.map((item) => item.id),
+      item_parameters: Object.fromEntries(form.section.items.map((item) => [
+        item.id,
+        { difficulty: item.difficulty, discrimination: item.discrimination, rules: item.rules },
+      ])),
+      reused_items: form.reused,
+      raw_correct: irt.correct,
+      theta: Number(irt.theta.toFixed(3)),
+      theta_standard_error: Number(irt.standardError.toFixed(3)),
+      test_information: Number(irt.information.toFixed(3)),
+    };
+    persistRecord();
+    renderResult(scored, irt, workingSeconds);
+  }
+
+  function renderResult(scored, irt, workingSeconds) {
+    root.replaceChildren();
+    const score = scored.scores['figural-reasoning'];
+    const total = form.section.items.length;
+    const ruleStats = form.section.items.map((item) => ({
+      rules: item.rules,
+      correct: answers[item.id] === item.solution,
+    }));
+    const panel = el('section', { class: 'pi-exam-result pi-reveal' }, [
+      el('header', { class: 'pi-exam-result__hero' }, [
+        el('div', {}, [
+          el('p', { class: 'pi-eyebrow', text: 'Sitting complete' }),
+          el('h1', { text: 'Your reasoning snapshot' }),
+          el('p', {
+            text: 'A calibrated, self-paced attempt—not an IQ number, diagnosis, or ceiling on what you can learn.',
+          }),
+        ]),
+        el('div', {
+          class: 'pi-exam-score',
+          role: 'img',
+          'aria-label': `${score} correct out of ${total}`,
+        }, [
+          el('strong', { text: String(score) }),
+          el('span', { text: `/ ${total}` }),
+          el('small', { text: 'exact constructions' }),
+        ]),
+      ]),
+      el('div', { class: 'pi-exam-result__stats' }, [
+        resultStat(formatClock(workingSeconds), 'active working time'),
+        resultStat(String(skipped.length), 'skipped'),
+        resultStat(String(total - form.reused), 'new-to-you items'),
+        resultStat(`${form.bankSize}`, 'items in bank'),
+      ]),
+      el('section', { class: 'pi-exam-calibration' }, [
+        el('div', {}, [
+          el('p', { class: 'pi-kicker', text: 'Cross-form estimate' }),
+          el('h2', { text: `${irt.theta >= 0 ? '+' : ''}${irt.theta.toFixed(2)} θ` }),
+          el('p', {
+            text: `Uncertainty ±${irt.standardError.toFixed(2)}. This uses the published OMIB item parameters so different random forms can be compared more honestly than raw totals.`,
+          }),
+        ]),
+        el('p', {
+          class: 'pi-hint',
+          text: 'Theta is an item-bank scale—not IQ, a percentile, or a population norm. Smaller uncertainty means this form was more informative near this estimate.',
+        }),
+      ]),
+      renderRuleProfile(ruleStats),
+      renderInterpretation(readout[0]),
+      renderResultReflection(),
+      renderSaveActions(),
+    ]);
+    root.appendChild(panel);
+    mountMotion(doc);
+  }
+
+  function renderRuleProfile(stats) {
+    const section = el('section', { class: 'pi-exam-analysis' }, [
+      el('div', {}, [
+        el('p', { class: 'pi-kicker', text: 'Complexity profile' }),
+        el('h2', { text: 'How the rule load changed the challenge' }),
+        el('p', {
+          text: 'More rules usually means more relationships to hold and test. This is descriptive of this sitting, not a percentile.',
+        }),
+      ]),
+    ]);
+    const chart = el('div', { class: 'pi-exam-rule-chart' });
+    for (let rules = 1; rules <= 5; rules++) {
+      const group = stats.filter((item) => item.rules === rules);
+      const correct = group.filter((item) => item.correct).length;
+      const percent = group.length ? Math.round((correct / group.length) * 100) : 0;
+      chart.appendChild(el('div', { class: 'pi-exam-rule-row' }, [
+        el('span', { text: `${rules} rule${rules === 1 ? '' : 's'}` }),
+        el('div', { class: 'pi-exam-rule-track' }, [
+          el('span', { style: `width:${percent}%` }),
+        ]),
+        el('strong', { text: `${correct}/${group.length}` }),
+      ]));
+    }
+    section.appendChild(chart);
+    return section;
+  }
+
+  function renderInterpretation(entry) {
+    if (!entry) return el('div');
+    return el('section', { class: 'pi-exam-interpretation' }, [
+      el('p', { class: 'pi-kicker', text: humanize(entry.band) }),
+      el('h2', { text: 'Read the conditions as well as the score.' }),
+      el('div', { class: 'pi-exam-interpretation__grid' }, [
+        interpretation('What this attempt showed', entry.light),
+        interpretation('What it cannot establish', entry.shadow),
+        interpretation('One useful experiment', entry.one_thing_to_try),
+      ]),
+    ]);
+  }
+
+  function renderResultReflection() {
+    const textarea = el('textarea', {
+      class: 'pi-textarea',
+      rows: '5',
+      placeholder: 'What strategy helped? Where did time pressure change your approach? What would you test differently next time?',
+      'aria-label': 'Reflection on this reasoning sitting',
+    });
+    let saveDelay = 0;
+    const status = el('p', { class: 'pi-hint', text: 'Saved with this sitting as you type.' });
+    textarea.addEventListener('input', () => {
+      record = { ...record, student_snapshot: textarea.value };
+      library.state = upsertRecord(library.state, record);
+      clearTimeout(saveDelay);
+      saveDelay = win.setTimeout(() => {
+        const saved = persistRecord();
+        status.textContent = saved ? 'Reflection saved locally ✓' : 'Local save unavailable—download your result.';
+      }, 250);
+    });
+    return el('section', { class: 'pi-exam-reflection' }, [
+      el('p', { class: 'pi-kicker', text: 'Your interpretation' }),
+      el('h2', { text: 'What happened while you were solving?' }),
+      textarea,
+      status,
+    ]);
+  }
+
+  function renderSaveActions() {
+    const status = el('p', {
+      class: 'pi-local-status',
+      text: library.available
+        ? `Saved locally · ${library.state.records.length} sittings · ${formatBytes(library.bytes)}`
+        : 'Local saving unavailable—download now.',
+    });
+    const backup = button('Download complete backup', 'pi-btn pi-btn--primary', () => {
+      persistRecord();
+      const exportedAt = new Date().toISOString();
+      downloadText(serializeArchive(library.state, exportedAt), archiveFilename(exportedAt));
+    });
+    const individual = button('Download this result', 'pi-btn', () => manualDownload(record, { doc }));
+    const retake = button('Draw a fresh form', 'pi-btn', () => {
+      persistRecord();
+      win.location.reload();
+    });
+    return el('section', { class: 'pi-exam-save' }, [
+      el('div', {}, [
+        el('p', { class: 'pi-kicker', text: 'Protect the history' }),
+        el('h2', { text: 'Keep a copy beyond this browser.' }),
+        el('p', {
+          text: 'Download the complete backup and place it in OneDrive, Google Drive, iCloud Drive, SharePoint, or another trusted cloud folder.',
+        }),
+        status,
+      ]),
+      el('div', { class: 'pi-exam-save__actions' }, [
+        backup,
+        individual,
+        el('a', { class: 'pi-btn', href: '../viewer/viewer.html', text: 'Open my portrait' }),
+        retake,
+        el('a', { class: 'pi-btn pi-btn--quiet', href: '../index.html', text: 'Return to inventory menu' }),
+      ]),
+    ]);
+  }
+
+  function makeSitebar() {
+    return el('nav', { class: 'pi-sitebar pi-exam-sitebar', 'aria-label': 'Personal Inventory' }, [
+      el('a', { class: 'pi-brand', href: '../index.html#assessments' }, [
+        el('span', { class: 'pi-brand__mark', 'aria-hidden': 'true' }),
+        el('span', { text: '← Assessments' }),
+      ]),
+      el('div', { class: 'pi-sitebar__actions' }, [
+        el('a', { class: 'pi-portrait-nav', href: '../viewer/viewer.html', 'aria-label': 'Open my portrait' }, [
+          el('span', { class: 'pi-portrait-avatar', 'aria-hidden': 'true' }, [el('span')]),
+          el('span', { class: 'pi-portrait-nav__copy' }, [
+            el('strong', { text: 'My portrait' }),
+            el('small', { text: 'Saved results' }),
+          ]),
+        ]),
+        el('span', { class: 'pi-exam-sitebar__mode', text: 'REASONING LAB / LOCAL' }),
+      ]),
+    ]);
+  }
+
+  function renderWelcomeArt() {
+    const art = el('div', { class: 'pi-exam-welcome__art', 'aria-hidden': 'true' });
+    for (const code of form.section.items[0].item_code.split(',').slice(0, 5)) {
+      art.appendChild(drawCode(doc, code, 'pi-exam-welcome__tile'));
+    }
+    art.appendChild(el('div', { class: 'pi-exam-welcome__tile pi-exam-welcome__tile--missing', text: '?' }));
+    return art;
+  }
+
+  function spec(value, label) {
+    return el('div', {}, [el('strong', { text: value }), el('span', { text: label })]);
+  }
+
+  function rule(number, title, copy) {
+    return el('li', {}, [
+      el('span', { text: number }),
+      el('div', {}, [el('strong', { text: title }), el('p', { text: copy })]),
+    ]);
+  }
+
+  function resultStat(value, label) {
+    return el('div', {}, [el('strong', { text: value }), el('span', { text: label })]);
+  }
+
+  function interpretation(title, copy) {
+    return el('article', {}, [el('h3', { text: title }), el('p', { text: copy })]);
+  }
+
+  function bitsFrom(selected) {
+    return Array.from({ length: 20 }, (_, index) => selected.has(index) ? '1' : '0').join('');
+  }
+
+  function persistRecord() {
+    if (!record) return false;
+    library.state = upsertRecord(library.state, record);
+    const saved = saveLibrary(library.state);
+    library.available = saved.saved;
+    library.bytes = saved.bytes;
+    return saved.saved;
+  }
+
+  function formatClock(totalSeconds) {
+    const seconds = Math.max(0, Math.round(totalSeconds));
+    return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  }
+
+  function elapsedSeconds() {
+    const live = active && resumedAt ? Date.now() - resumedAt : 0;
+    return Math.round((accumulatedTime + live) / 1000);
+  }
+
+  function humanize(value) {
+    return String(value).replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+  }
+
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const link = el('a', { href, download: filename });
+    link.hidden = true;
+    doc.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
+  }
+
+  function button(text, className, onClick) {
+    const node = el('button', { type: 'button', class: className, text });
+    node.addEventListener('click', onClick);
+    return node;
+  }
+
+  function el(tag, attrs = {}, children = []) {
+    const node = doc.createElement(tag);
+    for (const [key, value] of Object.entries(attrs)) {
+      if (key === 'class') node.className = value;
+      else if (key === 'text') node.textContent = value;
+      else if (key === 'style') node.setAttribute('style', value);
+      else node.setAttribute(key, value);
+    }
+    for (const child of children) if (child) node.appendChild(child);
+    return node;
+  }
+}
+
+return { mountMatrixAssessment };
+});
+
 __def("instruments/landing-page.js", function(__req){
 const { formatBytes, loadLibrary } = __req("engine/local-store.js");
 const { mountMotion } = __req("engine/motion.js");
@@ -1500,12 +2373,29 @@ function mountLanding(doc = document) {
 
   for (const card of doc.querySelectorAll('[data-instrument]')) {
     const count = counts[card.dataset.instrument] || 0;
-    if (!count) continue;
-    card.classList.add('is-complete');
     const badge = doc.createElement('span');
-    badge.className = 'pi-card__complete';
-    badge.textContent = count > 1 ? `✓ Completed ${count}× · retake` : '✓ Completed · retake';
+    badge.className = 'pi-card__state';
+    if (count) {
+      card.classList.add('is-complete');
+      badge.classList.add('is-complete');
+      badge.textContent = count > 1 ? `✓ Completed ${count}× · retake` : '✓ Completed · retake';
+    } else {
+      badge.textContent = '○ Not started';
+    }
     card.appendChild(badge);
+  }
+
+  const instrumentCards = Array.from(doc.querySelectorAll('[data-instrument]'));
+  const completed = instrumentCards
+    .filter((card) => Boolean(counts[card.dataset.instrument])).length;
+  for (const count of doc.querySelectorAll('[data-portrait-count]')) {
+    count.textContent = completed
+      ? `${completed} of ${instrumentCards.length} lenses complete`
+      : 'No results yet';
+  }
+  for (const avatar of doc.querySelectorAll('.pi-portrait-avatar')) {
+    const progress = instrumentCards.length ? completed / instrumentCards.length : 0;
+    avatar.style.setProperty('--pi-portrait-progress', `${Math.round(progress * 360)}deg`);
   }
 
   const status = doc.querySelector('[data-library-status]');
@@ -1571,6 +2461,8 @@ function aggregateRecords(records) {
           score,
           band: (r.bands || {})[scale],
           instrument_version: r.instrument_version,
+          administration_mode: r.administration?.mode || 'legacy',
+          metric: r.administration?.theta != null ? 'theta' : 'raw',
         });
       }
       if (typeof r.student_snapshot === 'string' && r.student_snapshot.trim() !== '') {
@@ -1612,6 +2504,8 @@ function scaleChange(series) {
   const last = series[series.length - 1];
   if (first.instrument_version && last.instrument_version &&
       first.instrument_version !== last.instrument_version) return null;
+  if (first.administration_mode && last.administration_mode &&
+      first.administration_mode !== last.administration_mode) return null;
   return {
     from: { timestamp: first.timestamp, score: first.score, band: first.band },
     to: { timestamp: last.timestamp, score: last.score, band: last.band },
@@ -1637,6 +2531,9 @@ const INSTRUMENT_NAMES = {
   'cognitive-ability': 'Figural Reasoning',
 };
 const INSTRUMENT_ORDER = Object.keys(INSTRUMENT_NAMES);
+const INSTRUMENT_PATHS = Object.fromEntries(
+  INSTRUMENT_ORDER.map((id) => [id, `../instruments/${id}.html`]),
+);
 const BAND_POSITION = {
   low: 16.667,
   'building-range': 16.667,
@@ -1718,6 +2615,14 @@ function mountPortraitViewer(ctx = {}) {
     out.replaceChildren();
     if (portrait.total === 0) {
       out.appendChild(renderEmptyState());
+      out.appendChild(el('div', { class: 'pi-section-heading pi-reveal' }, [
+        el('div', {}, [
+          el('p', { class: 'pi-kicker', text: 'The seven lenses' }),
+          el('h2', { text: 'Your complete inventory map' }),
+        ]),
+        el('p', { text: 'Every inventory has a place here. Start with any lens and this map will fill in automatically.' }),
+      ]));
+      out.appendChild(renderInstrumentGrid(portrait));
       return;
     }
 
@@ -1729,15 +2634,32 @@ function mountPortraitViewer(ctx = {}) {
         el('p', { class: 'pi-kicker', text: 'The individual lenses' }),
         el('h2', { text: 'Patterns and movement' }),
       ]),
-      el('p', { text: 'Dots show where each result band sits. When you repeat an inventory, the line connects your first and latest result and the exact raw-score change appears beside it.' }),
+      el('p', { text: 'Dots show where each result band sits. When you repeat an inventory under compatible scoring conditions, the line connects the first and latest result and the comparable-score change appears beside it.' }),
     ]);
     out.appendChild(heading);
 
-    const grid = el('div', { class: 'pi-portrait-grid' });
-    for (const instrument of portrait.instruments) grid.appendChild(renderInstrument(instrument, portrait));
-    out.appendChild(grid);
+    out.appendChild(renderInstrumentGrid(portrait));
 
     if (portrait.snapshots.length) out.appendChild(renderReflectionArchive(portrait.snapshots));
+  }
+
+  function renderInstrumentGrid(portrait) {
+    const grid = el('div', { class: 'pi-portrait-grid' });
+    const instrumentsById = new Map(
+      portrait.instruments.map((instrument) => [instrument.instrument_id, instrument]),
+    );
+    for (const id of INSTRUMENT_ORDER) {
+      const instrument = instrumentsById.get(id);
+      grid.appendChild(instrument
+        ? renderInstrument(instrument, portrait)
+        : renderMissingInstrument(id));
+    }
+    for (const instrument of portrait.instruments) {
+      if (!INSTRUMENT_ORDER.includes(instrument.instrument_id)) {
+        grid.appendChild(renderInstrument(instrument, portrait));
+      }
+    }
+    return grid;
   }
 
   function renderEmptyState() {
@@ -1869,7 +2791,11 @@ function mountPortraitViewer(ctx = {}) {
     const scaleNames = scaleNameMap(instrument.latest);
     const comparableLongitudinal = Object.fromEntries(
       Object.entries(instrument.longitudinal)
-        .map(([id, series]) => [id, currentVersionSeries(series, instrument.latest.instrument_version)])
+        .map(([id, series]) => [id, currentVersionSeries(
+          series,
+          instrument.latest.instrument_version,
+          instrument.latest.administration?.mode || 'legacy',
+        )])
         .filter(([, series]) => series.length),
     );
     const scales = Object.keys(comparableLongitudinal);
@@ -1903,6 +2829,30 @@ function mountPortraitViewer(ctx = {}) {
     return card;
   }
 
+  function renderMissingInstrument(id) {
+    return el('article', { class: 'pi-portrait-card pi-portrait-card--missing pi-reveal' }, [
+      el('header', { class: 'pi-portrait-card__header' }, [
+        el('div', {}, [
+          el('p', { class: 'pi-card__number', text: 'NOT COMPLETED' }),
+          el('h2', { text: nameFor(id) }),
+        ]),
+        el('span', { class: 'pi-portrait-card__empty-mark', 'aria-hidden': 'true', text: '○' }),
+      ]),
+      el('div', { class: 'pi-portrait-card__empty-copy' }, [
+        el('p', {
+          text: id === 'learner-profile'
+            ? 'Your selected learner attributes and commitment will appear here after the reflection.'
+            : 'Complete this lens to add its pattern to the portrait. Repeat it later to make change visible.',
+        }),
+        el('a', {
+          class: 'pi-btn',
+          href: INSTRUMENT_PATHS[id],
+          text: `Start ${nameFor(id)} →`,
+        }),
+      ]),
+    ]);
+  }
+
   function renderBandGraph(ids, longitudinal, names) {
     const graph = el('div', { class: 'pi-band-graph' });
     graph.appendChild(el('div', { class: 'pi-band-graph__axis', 'aria-hidden': 'true' }, [
@@ -1933,7 +2883,11 @@ function mountPortraitViewer(ctx = {}) {
       row.appendChild(el('span', {
         class: `pi-graph-delta${change && change.delta !== 0 ? ' has-change' : ''}`,
         text: change ? `${change.delta > 0 ? '+' : ''}${change.delta}` : '',
-        title: change ? 'Raw-score change from first to latest sitting' : '',
+        title: change
+          ? (series[0]?.metric === 'theta'
+            ? 'Calibrated OMIB theta change from first to latest compatible sitting'
+            : 'Raw-score change from first to latest compatible sitting')
+          : '',
       }));
       graph.appendChild(row);
     }
@@ -1963,7 +2917,9 @@ function mountPortraitViewer(ctx = {}) {
         row.appendChild(el('span', {
           class: 'pi-delta',
           text: `${change.delta > 0 ? '+' : ''}${change.delta}`,
-          title: 'Change in raw score between the first and latest sitting',
+          title: series[0]?.metric === 'theta'
+            ? 'Change in calibrated OMIB theta between compatible sittings'
+            : 'Change in raw score between compatible sittings',
         }));
       }
       list.appendChild(row);
@@ -2083,16 +3039,17 @@ function primaryScaleIds(record) {
   return all;
 }
 
-function currentVersionSeries(series, version) {
+function currentVersionSeries(series, version, mode) {
   if (!Array.isArray(series) || !series.length) return [];
-  return series.filter((point) => point.instrument_version === version);
+  return series.filter((point) =>
+    point.instrument_version === version && point.administration_mode === mode);
 }
 
 return { mountPortraitViewer };
 });
 
   var PI = {};
-  ['engine/scoring.js','engine/engine.js','engine/save-adapter.js','engine/local-store.js','engine/motion.js','instruments/instrument-page.js','instruments/landing-page.js','viewer/viewer.js','viewer/viewer-page.js']
+  ['engine/scoring.js','engine/irt.js','engine/matrix-form.js','engine/engine.js','engine/save-adapter.js','engine/local-store.js','engine/motion.js','instruments/instrument-page.js','instruments/matrix-assessment-page.js','instruments/landing-page.js','viewer/viewer.js','viewer/viewer-page.js']
     .forEach(function(k){ var m = __req(k); for (var key in m) PI[key] = m[key]; });
   (typeof window !== 'undefined' ? window : globalThis).PI = PI;
 })();

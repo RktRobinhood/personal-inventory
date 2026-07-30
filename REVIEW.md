@@ -9,19 +9,22 @@ genuinely human-judgment items remain.
 
 ---
 
-## Layer-1 status (automated — all green, 13 gates)
+## Layer-1 status (automated — all green, 14 gates)
 
-`schema:definitions` (7) · `schema:records` (8) · `scoring:fixtures` (24 cases /
+`schema:definitions` (7) · `schema:records` (9) · `scoring:fixtures` (24 cases /
 6 files) · `lint:essence` (tendency-language enforced) · `citation:license` (7) ·
 **`content:fidelity` (354 Likert items verified verbatim against their cited sources)** ·
-`render:smoke` (9 pages) · `net:none` (26 files, zero network) · `pii:none` ·
-`viewer:aggregate` · `library:local` · `matrix:scoring`.
+`render:smoke` (9 pages / 14 engine modules) · `net:none` (29 files, zero
+network) · `pii:none` · `viewer:aggregate` · `library:local` ·
+`matrix:scoring` · `matrix:forms`.
 
 The **content:fidelity** gate is the automated transcription check for the 354
 Likert prompts: every prompt must appear verbatim in its
 `content-sources/<id>.md`. The construction-format assessment is covered
-separately by `matrix:scoring`, which exact-matches all 22 published solution
-keys. Any future drift that breaks scoring fails the build.
+separately by `matrix:scoring`, which exact-matches all 220 published solution
+keys, and `matrix:forms`, which checks bank size, calibration flags, form
+balance, exposure control, fixed palette order, and 2PL estimation. Any future
+drift that breaks scoring fails the build.
 
 ---
 
@@ -35,13 +38,15 @@ keys. Any future drift that breaks scoring fails the build.
 | Self-Efficacy | 10, 1 scale | GSE (Schwarzer & Jerusalem 1995) | verbatim (PsyToolkit) |
 | Growth Mindset | 3, 1 scale | Dweck (SPARQtools) | verbatim |
 | Learner Profile | aspirational, unscored | IB Learner Profile + in-house reframes | framework sourced; copy authored |
-| Figural Reasoning | 22 construction-format matrices, 1 scale | Open Matrices Item Bank, calibrated Set 1 items | **High for figural reasoning** — published 2PL calibration; not normed here as an IQ score |
+| Figural Reasoning | complete 220-item bank; 2 practice + balanced 28-item scored forms | Open Matrices Item Bank | **High for figural reasoning** — 219 items carry published 2PL calibration; not normed here as an IQ score |
 
 The cognitive instrument is intentionally narrower than a full IQ battery. OMIB
-contains 220 openly available, empirically calibrated figural-matrix items. This
-site uses one 22-item set and reports a raw range for reflection. It does not
-convert the result to an IQ number because no age-specific Danish norming study,
-supervised standardisation, or multi-domain battery is present. See
+contains 220 openly available figural-matrix items, 219 with usable published
+2PL parameters. This site draws exposure-aware, balanced 28-item forms and
+reports both exact constructions and a calibrated theta estimate with
+uncertainty. It does not convert the result to an IQ number because no
+age-specific Danish norming study, supervised standardisation, or multi-domain
+battery is present. See
 `content-sources/cognitive-ability.md` and `THIRD_PARTY_NOTICES.md`.
 
 ---

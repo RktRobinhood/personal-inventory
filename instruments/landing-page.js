@@ -10,12 +10,29 @@ export function mountLanding(doc = document) {
 
   for (const card of doc.querySelectorAll('[data-instrument]')) {
     const count = counts[card.dataset.instrument] || 0;
-    if (!count) continue;
-    card.classList.add('is-complete');
     const badge = doc.createElement('span');
-    badge.className = 'pi-card__complete';
-    badge.textContent = count > 1 ? `✓ Completed ${count}× · retake` : '✓ Completed · retake';
+    badge.className = 'pi-card__state';
+    if (count) {
+      card.classList.add('is-complete');
+      badge.classList.add('is-complete');
+      badge.textContent = count > 1 ? `✓ Completed ${count}× · retake` : '✓ Completed · retake';
+    } else {
+      badge.textContent = '○ Not started';
+    }
     card.appendChild(badge);
+  }
+
+  const instrumentCards = Array.from(doc.querySelectorAll('[data-instrument]'));
+  const completed = instrumentCards
+    .filter((card) => Boolean(counts[card.dataset.instrument])).length;
+  for (const count of doc.querySelectorAll('[data-portrait-count]')) {
+    count.textContent = completed
+      ? `${completed} of ${instrumentCards.length} lenses complete`
+      : 'No results yet';
+  }
+  for (const avatar of doc.querySelectorAll('.pi-portrait-avatar')) {
+    const progress = instrumentCards.length ? completed / instrumentCards.length : 0;
+    avatar.style.setProperty('--pi-portrait-progress', `${Math.round(progress * 360)}deg`);
   }
 
   const status = doc.querySelector('[data-library-status]');

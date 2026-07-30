@@ -25,6 +25,7 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, dirname, resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 import { validate } from '../vendor/jsonschema.js';
 import { lintDefinitions } from './lint-essence.js';
 
@@ -61,6 +62,19 @@ const SAMPLE_RECORDS = [
     variant: 'scores-only', scores: { order: 4 }, bands: { order: 'high' }, readout: [], student_snapshot: '' },
   { instrument_id: 'learner-profile', instrument_version: '1.0.0', timestamp: '2026-08-20T09:00:00Z',
     variant: 'full', raw_responses: { commit: ['open-minded'] }, scores: {}, bands: {}, readout: [], student_snapshot: 'My commitment for the year.' },
+  { instrument_id: 'cognitive-ability', instrument_version: '2.0.0', timestamp: '2026-08-20T10:00:00Z',
+    variant: 'full', raw_responses: { 'omib-3': '00001010000000000000' },
+    scores: { 'figural-reasoning': 0.314 }, bands: { 'figural-reasoning': 'middle-range' },
+    readout: [{ scale: 'figural-reasoning', scale_name: 'Figural Reasoning', band: 'middle-range',
+      construct_explainer: 'x', light: 'a', shadow: 'b', one_thing_to_try: 'c' }],
+    student_snapshot: '',
+    administration: { mode: 'standard-untimed', form_seed: 'fixture', bank_size: 220,
+      form_length: 28, elapsed_seconds: 1440, interruptions: 1, skipped_items: [],
+      palette_order: Array.from({ length: 20 }, (_, index) => index),
+      item_order: ['omib-3'],
+      item_parameters: { 'omib-3': { difficulty: 1.43, discrimination: 1.14, rules: 1 } },
+      reused_items: 0,
+      raw_correct: 16, theta: 0.314, theta_standard_error: 0.28, test_information: 12.7 } },
 ];
 
 const NETWORK_PATTERNS = [
@@ -380,6 +394,55 @@ await gate('matrix:scoring', async () => {
     fail(`empty constructions should score 0, got ${zero.scores['figural-reasoning']}`);
   }
   return { detail: `${section.items.length} published solutions exact-matched correctly` };
+});
+
+await gate('matrix:forms', async () => {
+  const definition = readJSON(p('definitions', 'cognitive-ability.json'));
+  const section = definition.sections.find((entry) => entry.type === 'scored-matrix');
+  const { createMatrixForm } = await import(pathToFileURL(p('engine', 'matrix-form.js')).href);
+  const { estimate2pl } = await import(pathToFileURL(p('engine', 'irt.js')).href);
+  if (section.items.length !== 220) fail(`expected complete 220-item bank, got ${section.items.length}`);
+  if (section.items.filter((item) => item.calibrated !== false).length !== 219) {
+    fail('expected 219 calibrated items and one retained misfitting item');
+  }
+  const bankFields = section.items.map(({
+    id, item_code, solution, difficulty, discrimination, calibrated, rules,
+  }) => ({ id, item_code, solution, difficulty, discrimination, calibrated, rules }));
+  const bankHash = createHash('sha256').update(JSON.stringify(bankFields)).digest('hex');
+  if (bankHash !== 'b4ddf7801df897a8c8bd1a1e39999fcf9a7d05e42bdcb063f05a931fe00afae2') {
+    fail(`embedded item bank drifted from the imported official workbook (${bankHash})`);
+  }
+
+  const first = createMatrixForm(section, { seed: 'repeatable-form' });
+  const repeated = createMatrixForm(section, { seed: 'repeatable-form' });
+  const ids = first.section.items.map((item) => item.id);
+  if (first.section.items.length !== 28) fail(`expected 28 scored items, got ${first.section.items.length}`);
+  if (first.practiceItems.length !== 2) fail(`expected two practice items, got ${first.practiceItems.length}`);
+  if (ids.join('|') !== repeated.section.items.map((item) => item.id).join('|')) {
+    fail('same seed did not reproduce the same form');
+  }
+  const counts = Object.fromEntries([1, 2, 3, 4, 5].map((rules) => [
+    rules,
+    first.section.items.filter((item) => item.rules === rules).length,
+  ]));
+  if (JSON.stringify(counts) !== JSON.stringify({ 1: 3, 2: 6, 3: 10, 4: 6, 5: 3 })) {
+    fail(`rule-count balance is wrong: ${JSON.stringify(counts)}`);
+  }
+  const next = createMatrixForm(section, { seed: 'fresh-form', excludeIds: ids });
+  const overlap = next.section.items.filter((item) => ids.includes(item.id)).length;
+  if (overlap !== 0) fail(`fresh form reused ${overlap} item(s) before necessary`);
+  if (first.paletteOrder.some((value, index) => value !== index)) {
+    fail('validated construction palette order was changed');
+  }
+
+  const correct = Object.fromEntries(first.section.items.map((item) => [item.id, item.solution]));
+  const incorrect = Object.fromEntries(first.section.items.map((item) => [item.id, '00000000000000000000']));
+  const high = estimate2pl(first.section.items, correct);
+  const low = estimate2pl(first.section.items, incorrect);
+  if (!(high.theta > 0 && low.theta < 0 && high.standardError > 0 && low.standardError > 0)) {
+    fail('2PL estimator did not separate all-correct and all-incorrect response patterns');
+  }
+  return { detail: '220-item bank, balanced 28-item forms, exposure control, and 2PL estimate passed' };
 });
 
 function scanPII(node, path, label, hits) {

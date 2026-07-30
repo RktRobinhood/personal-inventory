@@ -18,10 +18,13 @@ students can export a complete JSON backup for cloud storage and import it on
 another device. The Portrait view turns repeated sittings into timelines,
 first-to-latest deltas, and structured reflection.
 
-Figural Reasoning uses 22 calibrated construction-format items from the Open
-Matrices Item Bank. It measures one aspect of cognitive ability (figural
-reasoning); it is deliberately not labelled or converted into an IQ score
-because this self-administered form has no population norms.
+Figural Reasoning embeds the complete 220-item Open Matrices Item Bank. Each
+sitting begins with two guided practice puzzles, then draws a seeded,
+exposure-aware, rule-balanced 28-item form from the 219 calibrated items.
+Different forms are compared using the published 2PL parameters with an
+uncertainty estimate—not by treating raw totals as interchangeable. It measures
+one aspect of cognitive ability and is deliberately not converted into an IQ
+score because this self-administered form has no population norms.
 
 ## Open the site
 

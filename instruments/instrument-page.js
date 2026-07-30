@@ -22,11 +22,19 @@ export function mountInstrument(definition, opts = {}) {
   let library = loadLibrary();
 
   const sitebar = el('nav', { class: 'pi-sitebar', 'aria-label': 'Personal Inventory' });
-  const brand = el('a', { class: 'pi-brand', href: '../index.html' });
-  brand.append(el('span', { class: 'pi-brand__mark', 'aria-hidden': 'true' }), el('span', { text: 'Personal Inventory' }));
+  const brand = el('a', { class: 'pi-brand', href: '../index.html#assessments' });
+  brand.append(el('span', { class: 'pi-brand__mark', 'aria-hidden': 'true' }), el('span', { text: '← Assessments' }));
+  const actions = el('div', { class: 'pi-sitebar__actions' });
+  const portraitLinkTop = el('a', { class: 'pi-portrait-nav', href: '../viewer/viewer.html', 'aria-label': 'Open my portrait' });
+  const portraitAvatar = el('span', { class: 'pi-portrait-avatar', 'aria-hidden': 'true' });
+  portraitAvatar.appendChild(el('span'));
+  const portraitCopy = el('span', { class: 'pi-portrait-nav__copy' });
+  portraitCopy.append(el('strong', { text: 'My portrait' }), el('small', { text: 'Saved results' }));
+  portraitLinkTop.append(portraitAvatar, portraitCopy);
   const privacy = el('span', { class: 'pi-privacy' });
   privacy.appendChild(el('span', { text: 'Offline & private' }));
-  sitebar.append(brand, privacy);
+  actions.append(portraitLinkTop, privacy);
+  sitebar.append(brand, actions);
   doc.body.insertBefore(sitebar, doc.body.firstChild);
 
   const formWrap = doc.createElement('div');
@@ -98,6 +106,7 @@ export function mountInstrument(definition, opts = {}) {
     completed = true;
     dirty = false;
     persistCurrent();
+    celebrateCompletion();
     mountMotion(doc);
     readoutEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
@@ -170,6 +179,10 @@ export function mountInstrument(definition, opts = {}) {
     const fill = el('div', { class: 'pi-progress__fill' });
     const progressStage = el('span', { class: 'pi-progress__stage', text: 'Your progress' });
     progressCopy.append(progressStage, progressCount);
+    track.setAttribute('role', 'progressbar');
+    track.setAttribute('aria-label', 'Questions answered');
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', String(questionGroups.length));
     track.appendChild(fill);
     progress.append(progressCopy, track, el('p', {
       class: 'pi-progress__shortcut',
@@ -185,9 +198,11 @@ export function mountInstrument(definition, opts = {}) {
         if (complete) answered++;
       }
       fill.style.width = `${Math.round((answered / questionGroups.length) * 100)}%`;
+      track.setAttribute('aria-valuenow', String(answered));
+      const percent = Math.round((answered / questionGroups.length) * 100);
       progressCount.textContent = answered === questionGroups.length
         ? 'Complete — ready for your read-out'
-        : `${answered} of ${questionGroups.length}`;
+        : `${answered} of ${questionGroups.length} · ${percent}%`;
     };
     engine.el.addEventListener('change', update);
     update();
@@ -263,6 +278,24 @@ export function mountInstrument(definition, opts = {}) {
     const count = library.state.records.length;
     localStatus.textContent = `✓ Saved locally · ${count} completed sitting${count === 1 ? '' : 's'} · ${formatBytes(library.bytes)}`;
     localStatus.className = 'pi-local-status';
+  }
+
+  function celebrateCompletion() {
+    const notice = el('div', {
+      class: 'pi-completion-toast',
+      role: 'status',
+      'aria-live': 'polite',
+    });
+    notice.append(
+      el('span', { class: 'pi-completion-toast__check', text: '✓' }),
+      el('span', { text: 'Assessment complete — your read-out is ready.' }),
+    );
+    doc.body.appendChild(notice);
+    requestAnimationFrame(() => notice.classList.add('is-visible'));
+    setTimeout(() => {
+      notice.classList.remove('is-visible');
+      setTimeout(() => notice.remove(), 400);
+    }, 2600);
   }
 
   function downloadText(text, filename) {
