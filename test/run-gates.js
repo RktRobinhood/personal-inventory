@@ -26,6 +26,7 @@ import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, dirname, resolve, extname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { runInNewContext } from 'node:vm';
 import { validate } from '../vendor/jsonschema.js';
 import { lintDefinitions } from './lint-essence.js';
 
@@ -251,6 +252,30 @@ await gate('render:smoke', async () => {
   }
   if (htmls.length === 0 && engineFiles.length === 0) return { skip: true, detail: 'no app files yet' };
   return { detail: `${htmls.length} HTML page(s) + ${engineFiles.length} engine module(s) ok` };
+});
+
+/* Execute the exact classic bundle shipped to GitHub Pages. Importing the
+   source modules is not enough: every dependency must also be registered in
+   the generated module table before any page can access window.PI. */
+await gate('bundle:runtime', async () => {
+  const sandbox = {
+    window: {},
+    console: { log() {}, warn() {}, error() {} },
+    setTimeout,
+    clearTimeout,
+    URL,
+    Blob,
+  };
+  runInNewContext(readFileSync(p('app.bundle.js'), 'utf8'), sandbox, {
+    filename: 'app.bundle.js',
+    timeout: 2000,
+  });
+  const pi = sandbox.window.PI;
+  if (!pi || typeof pi !== 'object') fail('generated bundle did not initialize window.PI');
+  for (const name of ['mountLanding', 'mountInstrument', 'mountMatrixAssessment', 'mountPortraitViewer']) {
+    if (typeof pi[name] !== 'function') fail(`generated bundle did not expose PI.${name}`);
+  }
+  return { detail: 'generated production bundle initializes window.PI and every page mount' };
 });
 
 /* 7. no network primitives */

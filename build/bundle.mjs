@@ -26,6 +26,7 @@ const MODULES = [
   'engine/scoring.js',
   'engine/irt.js',
   'engine/matrix-form.js',
+  'engine/matrix-draft.js',
   'engine/sections/info.js',
   'engine/sections/scored-likert.js',
   'engine/sections/scored-matrix.js',
@@ -42,6 +43,7 @@ const MODULES = [
   'viewer/viewer.js',
   'viewer/viewer-page.js',
 ];
+const MODULE_SET = new Set(MODULES);
 
 function transform(key, src) {
   const dir = posix.dirname(key);
@@ -55,6 +57,9 @@ function transform(key, src) {
     /^[ \t]*import\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"];?[ \t]*$/gm,
     (_full, names, rel) => {
       const target = posix.normalize(posix.join(dir, rel));
+      if (!MODULE_SET.has(target)) {
+        throw new Error(`${key} imports ${target}, but it is missing from the bundle module manifest`);
+      }
       const parts = names.split(',').map((n) => n.trim()).filter(Boolean).map((n) => {
         const mm = n.match(/^(\S+)\s+as\s+(\S+)$/);
         return mm ? `${mm[1]}: ${mm[2]}` : n;
