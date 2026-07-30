@@ -1,6 +1,6 @@
 # REVIEW.md — handoff
 
-Build is **code-complete: all Layer-1 gates green**, all six instruments built.
+Build is **code-complete: all Layer-1 gates green**, all seven instruments built.
 Run `npm test` any time. Deployment steps are in [`DEPLOY.md`](DEPLOY.md).
 
 This is deliberately short: most of what used to be "human checklist" is now either
@@ -9,22 +9,23 @@ genuinely human-judgment items remain.
 
 ---
 
-## Layer-1 status (automated — all green, 10 gates)
+## Layer-1 status (automated — all green, 13 gates)
 
-`schema:definitions` (6) · `schema:records` (8) · `scoring:fixtures` (24 cases /
-6 files) · `lint:essence` (tendency-language enforced) · `citation:license` (6) ·
-**`content:fidelity` (354 items verified verbatim against their cited sources)** ·
-`render:smoke` (8 pages) · `net:none` (19 files, zero network) · `pii:none` ·
-`viewer:aggregate`.
+`schema:definitions` (7) · `schema:records` (8) · `scoring:fixtures` (24 cases /
+6 files) · `lint:essence` (tendency-language enforced) · `citation:license` (7) ·
+**`content:fidelity` (354 Likert items verified verbatim against their cited sources)** ·
+`render:smoke` (9 pages) · `net:none` (26 files, zero network) · `pii:none` ·
+`viewer:aggregate` · `library:local` · `matrix:scoring`.
 
-The new **content:fidelity** gate is the automated transcribe-check you asked for:
-every scored item in every definition must appear verbatim in its
-`content-sources/<id>.md`. Any future drift between an instrument and its cited
-source now fails the build — it is not a thing a human has to eyeball.
+The **content:fidelity** gate is the automated transcription check for the 354
+Likert prompts: every prompt must appear verbatim in its
+`content-sources/<id>.md`. The construction-format assessment is covered
+separately by `matrix:scoring`, which exact-matches all 22 published solution
+keys. Any future drift that breaks scoring fails the build.
 
 ---
 
-## Instruments (all 6 built, gate-green)
+## Instruments (all 7 built, gate-green)
 
 | Instrument | Structure | Source | Provenance confidence |
 |------------|-----------|--------|------------------------|
@@ -34,6 +35,14 @@ source now fails the build — it is not a thing a human has to eyeball.
 | Self-Efficacy | 10, 1 scale | GSE (Schwarzer & Jerusalem 1995) | verbatim (PsyToolkit) |
 | Growth Mindset | 3, 1 scale | Dweck (SPARQtools) | verbatim |
 | Learner Profile | aspirational, unscored | IB Learner Profile + in-house reframes | framework sourced; copy authored |
+| Figural Reasoning | 22 construction-format matrices, 1 scale | Open Matrices Item Bank, calibrated Set 1 items | **High for figural reasoning** — published 2PL calibration; not normed here as an IQ score |
+
+The cognitive instrument is intentionally narrower than a full IQ battery. OMIB
+contains 220 openly available, empirically calibrated figural-matrix items. This
+site uses one 22-item set and reports a raw range for reflection. It does not
+convert the result to an IQ number because no age-specific Danish norming study,
+supervised standardisation, or multi-domain battery is present. See
+`content-sources/cognitive-ability.md` and `THIRD_PARTY_NOTICES.md`.
 
 ---
 
@@ -58,7 +67,7 @@ that set is single-source. Counts already match and the gate locks drift.)
 - **Strengths** uses the full original 213-item IPIP-VIA (≈20 min), grouped under
   the 6 VIA virtues as parent scales. (The shorter 96-item IPIP-VIA-R exists if you
   ever want a faster form.)
-- **Big Five** uses the full IPIP-NEO-120 facet-level form (≈15 min).
+- **Big Five** uses the full IPIP-NEO-120 facet-level form (typically 18–25 min here).
 - **Band cuts** `[0.3333, 0.6667]` across all scored instruments; a score exactly
   at 2/3 lands in the middle band (consistent everywhere, reflected in fixtures).
 

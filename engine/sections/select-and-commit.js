@@ -17,6 +17,13 @@ export function render(section, ctx) {
   const inputType = single ? 'radio' : 'checkbox';
 
   const boxes = [];
+  const minimum = section.min_select != null ? section.min_select : 0;
+  const maximum = section.max_select != null ? section.max_select : null;
+  const countStatus = h(doc, 'p', {
+    class: 'pi-selection-status',
+    role: 'status',
+    'aria-live': 'polite',
+  });
   const optionEls = section.options.map((opt) => {
     const id = `${section.id}-${opt.id}`;
     const attrs = { type: inputType, name: section.id, id, value: opt.id };
@@ -30,19 +37,23 @@ export function render(section, ctx) {
   });
 
   const enforceMax = () => {
-    if (single || section.max_select == null) return;
     const checkedCount = boxes.filter((b) => b.checked).length;
-    const atMax = checkedCount >= section.max_select;
+    const requirement = maximum == null
+      ? `Select at least ${minimum}`
+      : `Select ${minimum}–${maximum}`;
+    countStatus.textContent = `${requirement} · ${checkedCount} selected${checkedCount >= minimum ? ' ✓' : ''}`;
+    countStatus.classList.toggle('is-ready', checkedCount >= minimum);
+    if (single || maximum == null) return;
+    const atMax = checkedCount >= maximum;
     for (const b of boxes) b.disabled = atMax && !b.checked;
   };
-  if (!single && section.max_select != null) {
-    for (const b of boxes) b.addEventListener('change', enforceMax);
-  }
+  for (const b of boxes) b.addEventListener('change', enforceMax);
 
   const children = [];
   if (section.title) children.push(h(doc, 'h2', { class: 'pi-section__title', text: section.title }));
   const fieldset = h(doc, 'fieldset', { class: 'pi-commit' }, [
     h(doc, 'legend', { text: section.prompt }),
+    countStatus,
     ...optionEls,
   ]);
   children.push(fieldset);
@@ -50,10 +61,10 @@ export function render(section, ctx) {
 
   const read = () => {
     const selected = boxes.filter((b) => b.checked).map((b) => b.value);
-    const min = section.min_select != null ? section.min_select : 0;
-    const missing = selected.length < min ? [section.id] : [];
+    const missing = selected.length < minimum ? [section.id] : [];
     return { responses: { [section.id]: selected }, missing };
   };
 
+  enforceMax();
   return { el, read };
 }

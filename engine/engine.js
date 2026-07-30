@@ -16,6 +16,7 @@ import { h, getDoc } from './dom.js';
 import { scoreInstrument } from './scoring.js';
 import { render as info } from './sections/info.js';
 import { render as scoredLikert } from './sections/scored-likert.js';
+import { render as scoredMatrix } from './sections/scored-matrix.js';
 import { render as selfRating } from './sections/self-rating.js';
 import { render as selectAndCommit } from './sections/select-and-commit.js';
 import { render as freeReflection } from './sections/free-reflection.js';
@@ -23,6 +24,7 @@ import { render as freeReflection } from './sections/free-reflection.js';
 export const RENDERERS = {
   'info': info,
   'scored-likert': scoredLikert,
+  'scored-matrix': scoredMatrix,
   'self-rating': selfRating,
   'select-and-commit': selectAndCommit,
   'free-reflection': freeReflection,
@@ -33,7 +35,7 @@ function scaleIndex(definition) {
   const byId = {};
   const order = [];
   for (const section of definition.sections) {
-    if (section.type !== 'scored-likert') continue;
+    if (!['scored-likert', 'scored-matrix'].includes(section.type)) continue;
     for (const scale of section.scales) {
       byId[scale.id] = scale;
       order.push(scale.id);
@@ -91,9 +93,9 @@ export function assembleRecord(definition, { responses, scores, bands, readout, 
 /** UI labels for the taught read-out (engine copy — about the construct, never the person). */
 const READOUT_LABELS = {
   band: 'Where your answers lean',
-  explainer: 'What this is',
-  light: 'Where it helps',
-  shadow: 'Where it can get in the way',
+  explainer: 'What this measures',
+  light: 'What this result can offer',
+  shadow: 'What to keep in context',
   one_thing: 'One thing to try',
 };
 
@@ -124,22 +126,23 @@ export function createEngine(definition, ctx, options = {}) {
 
   const el = h(doc, 'form', { class: 'pi-instrument', 'data-instrument': definition.id });
   const itemCount = definition.sections.reduce((total, section) => total + (section.items ? section.items.length : 0), 0);
-  const scored = definition.sections.some((section) => section.type === 'scored-likert');
+  const scored = definition.sections.some((section) => ['scored-likert', 'scored-matrix'].includes(section.type));
   const duration = {
-    bigfive: 15,
-    grit: 2,
-    'growth-mindset': 1,
-    'learner-profile': 8,
-    'self-efficacy': 2,
-    strengths: 20,
-  }[definition.id] || Math.max(2, Math.round(itemCount / 10));
+    bigfive: '18–25',
+    grit: '2–4',
+    'growth-mindset': '1–2',
+    'learner-profile': '8–12',
+    'self-efficacy': '2–4',
+    strengths: '25–35',
+    'cognitive-ability': '20–30',
+  }[definition.id] || String(Math.max(2, Math.round(itemCount / 10)));
   const hero = h(doc, 'header', { class: 'pi-instrument__hero' }, [
     h(doc, 'p', { class: 'pi-eyebrow', text: scored ? 'A private self-check' : 'A guided reflection' }),
     definition.title ? h(doc, 'h1', { class: 'pi-instrument__title', text: definition.title }) : null,
     definition.intro ? h(doc, 'p', { class: 'pi-instrument__intro', text: definition.intro }) : null,
     h(doc, 'div', { class: 'pi-meta' }, [
       itemCount ? h(doc, 'span', { class: 'pi-meta__item', text: `${itemCount} questions` }) : null,
-      h(doc, 'span', { class: 'pi-meta__item', text: `About ${duration} min` }),
+      h(doc, 'span', { class: 'pi-meta__item', text: `${duration} min · varies by pace` }),
       h(doc, 'span', { class: 'pi-meta__item', text: 'Private on this device' }),
     ]),
   ]);
@@ -200,7 +203,10 @@ export function createEngine(definition, ctx, options = {}) {
       'data-band': entry.band,
     }, [
         h(doc, 'h3', { text: entry.scale_name || entry.scale }),
-        h(doc, 'p', { class: 'pi-readout__band', text: `${READOUT_LABELS.band}: ${entry.band}` }),
+        h(doc, 'p', {
+          class: 'pi-readout__band',
+          text: `${READOUT_LABELS.band}: ${entry.band.replace(/[-_]/g, ' ')}`,
+        }),
         readoutRow(doc, READOUT_LABELS.explainer, entry.construct_explainer),
         readoutRow(doc, READOUT_LABELS.light, entry.light),
         readoutRow(doc, READOUT_LABELS.shadow, entry.shadow),

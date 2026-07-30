@@ -77,8 +77,8 @@
       "type": "select-and-commit",
       "id": "commit",
       "title": "Choose where to push",
-      "prompt": "Which two or three of these would change the most if you leaned into them this year? Choose the ones worth real effort.",
-      "min_select": 1,
+      "prompt": "Required: select 2–3 attributes before continuing. Which would change the most if you leaned into them this year?",
+      "min_select": 2,
       "max_select": 3,
       "options": [
         { "id": "inquirers", "label": "Inquirers — keep asking the questions others skip", "ib_attribute": "Inquirers" },

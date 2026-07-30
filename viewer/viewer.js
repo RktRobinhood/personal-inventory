@@ -46,6 +46,7 @@ export function aggregateRecords(records) {
           timestamp: r.timestamp,
           score,
           band: (r.bands || {})[scale],
+          instrument_version: r.instrument_version,
         });
       }
       if (typeof r.student_snapshot === 'string' && r.student_snapshot.trim() !== '') {
@@ -65,6 +66,7 @@ export function aggregateRecords(records) {
       sittings: recs.length,
       first: recs[0],
       latest: recs[recs.length - 1],
+      versions: [...new Set(recs.map((record) => record.instrument_version))],
       longitudinal,
     });
   }
@@ -84,6 +86,8 @@ export function scaleChange(series) {
   if (!Array.isArray(series) || series.length < 2) return null;
   const first = series[0];
   const last = series[series.length - 1];
+  if (first.instrument_version && last.instrument_version &&
+      first.instrument_version !== last.instrument_version) return null;
   return {
     from: { timestamp: first.timestamp, score: first.score, band: first.band },
     to: { timestamp: last.timestamp, score: last.score, band: last.band },

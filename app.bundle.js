@@ -115,6 +115,22 @@ function scoreInstrument(definition, responses) {
   const leaves = {}; // scaleId -> { score, min, max, thresholds }  (scales with items)
 
   for (const section of definition.sections) {
+    if (section.type === 'scored-matrix') {
+      const thresholds = section.band_thresholds;
+      for (const item of section.items) {
+        if (!Object.prototype.hasOwnProperty.call(responses, item.id)) {
+          throw new Error(`missing response for item "${item.id}"`);
+        }
+        const raw = responses[item.id];
+        if (typeof raw !== 'string' || !/^[01]{20}$/.test(raw)) {
+          throw new Error(`response "${item.id}" is not a 20-element construction`);
+        }
+        const leaf = leaves[item.scale] || (leaves[item.scale] = { score: 0, min: 0, max: 0, thresholds });
+        leaf.score += raw === item.solution ? 1 : 0;
+        leaf.max += 1;
+      }
+      continue;
+    }
     if (section.type !== 'scored-likert') continue;
     const thresholds = section.band_thresholds;
     section.items.forEach((item, i) => {
@@ -136,7 +152,7 @@ function scoreInstrument(definition, responses) {
   // Domain rollups: a facet declares `parent`; the domain sums its facets.
   const domains = {}; // domainId -> { score, min, max, thresholds }
   for (const section of definition.sections) {
-    if (section.type !== 'scored-likert') continue;
+    if (!['scored-likert', 'scored-matrix'].includes(section.type)) continue;
     for (const scale of section.scales) {
       if (!scale.parent) continue;
       const leaf = leaves[scale.id];
@@ -248,6 +264,126 @@ function render(section, ctx) {
 return { render };
 });
 
+__def("engine/sections/scored-matrix.js", function(__req){
+/**
+ * Construction-based figural matrix items.
+ * Each response is a 20-bit string representing the selected construction
+ * elements. This mirrors the Open Matrices Item Bank response format.
+ */
+const { getDoc, h } = __req("engine/dom.js");
+
+function render(section, ctx) {
+  const doc = getDoc(ctx);
+  const children = [];
+  if (section.title) children.push(h(doc, 'h2', { class: 'pi-section__title', text: section.title }));
+  if (section.intro) children.push(h(doc, 'p', { class: 'pi-intro', text: section.intro }));
+  const inputsById = {};
+
+  section.items.forEach((item, index) => {
+    const codes = item.item_code.split(',');
+    const boxes = [];
+    const matrix = h(doc, 'div', { class: 'pi-matrix-grid', role: 'img', 'aria-label': `Matrix puzzle ${index + 1}` });
+    codes.slice(0, 8).forEach((code) => matrix.appendChild(drawCode(doc, code, 'pi-matrix-cell')));
+    matrix.appendChild(h(doc, 'div', { class: 'pi-matrix-cell pi-matrix-cell--missing', text: '?' }));
+
+    const palette = h(doc, 'div', { class: 'pi-matrix-palette', role: 'group', 'aria-label': 'Construction elements' });
+    for (let element = 0; element < 20; element++) {
+      const id = `${section.id}-${item.id}-${element}`;
+      const input = h(doc, 'input', { type: 'checkbox', id, name: item.id, value: String(element) });
+      const label = h(doc, 'label', { for: id, 'aria-label': `Toggle element ${element + 1}` }, [
+        drawElement(doc, element, 'pi-matrix-symbol'),
+      ]);
+      const choice = h(doc, 'span', { class: 'pi-matrix-choice' }, [input, label]);
+      boxes.push(input);
+      palette.appendChild(choice);
+    }
+    inputsById[item.id] = boxes;
+
+    children.push(h(doc, 'fieldset', { class: 'pi-item pi-matrix-item', 'data-question': String(index + 1) }, [
+      h(doc, 'legend', { text: `Matrix ${index + 1}` }),
+      h(doc, 'p', { class: 'pi-matrix-instruction', text: 'Build the missing tile. Select every element that belongs in it, then continue.' }),
+      matrix,
+      palette,
+    ]));
+  });
+
+  const el = h(doc, 'section', { class: 'pi-section pi-scored-matrix', 'data-section-id': section.id }, children);
+  const read = () => {
+    const responses = {};
+    const missing = [];
+    for (const [id, boxes] of Object.entries(inputsById)) {
+      const bits = boxes.map((box) => box.checked ? '1' : '0').join('');
+      responses[id] = bits;
+      if (!boxes.some((box) => box.checked)) missing.push(id);
+    }
+    return { responses, missing };
+  };
+  return { el, read };
+}
+
+function drawCode(doc, code, className) {
+  const svg = svgNode(doc, 'svg', { viewBox: '0 0 100 100', class: className, 'aria-hidden': 'true' });
+  [...code].forEach((bit, index) => {
+    if (bit === '1') drawInto(doc, svg, index);
+  });
+  return svg;
+}
+
+function drawElement(doc, index, className) {
+  const svg = svgNode(doc, 'svg', { viewBox: '0 0 100 100', class: className, 'aria-hidden': 'true' });
+  drawInto(doc, svg, index);
+  return svg;
+}
+
+function drawInto(doc, svg, index) {
+  const polygon = (points, filled = true) => svg.appendChild(svgNode(doc, 'polygon', {
+    points,
+    fill: filled ? 'currentColor' : 'none',
+    stroke: 'currentColor',
+    'stroke-width': '3',
+  }));
+  if (index < 4) {
+    polygon(['0,0 25,0 0,25', '25,100 0,100 0,75', '100,75 100,100 75,100', '75,0 100,0 100,25'][index]);
+  } else if (index < 8) {
+    polygon(['12.5,50 50,12.5', '12.5,50 50,87.5', '50,87.5 87.5,50', '50,12.5 87.5,50'][index - 4], false);
+  } else if (index < 12) {
+    polygon([
+      '37.5,0 62.5,0 62.5,12.5 37.5,12.5',
+      '0,37.5 0,62.5 12.5,62.5 12.5,37.5',
+      '37.5,87.5 62.5,87.5 62.5,100 37.5,100',
+      '87.5,37.5 87.5,62.5 100,62.5 100,37.5',
+    ][index - 8], false);
+  } else if (index === 12 || index === 13) {
+    svg.appendChild(svgNode(doc, 'rect', {
+      x: '40', y: '40', width: '20', height: '20',
+      fill: index === 12 ? 'currentColor' : 'none',
+      stroke: 'currentColor', 'stroke-width': '3',
+    }));
+  } else if (index === 14 || index === 15) {
+    svg.appendChild(svgNode(doc, 'circle', {
+      cx: '50', cy: '50', r: '10',
+      fill: index === 14 ? 'currentColor' : 'none',
+      stroke: 'currentColor', 'stroke-width': '3',
+    }));
+  } else {
+    polygon([
+      '50,12.5 37.5,25 62.5,25',
+      '12.5,50 25,37.5 25,62.5',
+      '50,87.5 37.5,75 62.5,75',
+      '87.5,50 75,37.5 75,62.5',
+    ][index - 16], false);
+  }
+}
+
+function svgNode(doc, tag, attrs) {
+  const node = doc.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+  return node;
+}
+
+return { render };
+});
+
 __def("engine/sections/self-rating.js", function(__req){
 /**
  * self-rating.js — student rates themselves on named dimensions. Aspirational/
@@ -321,6 +457,13 @@ function render(section, ctx) {
   const inputType = single ? 'radio' : 'checkbox';
 
   const boxes = [];
+  const minimum = section.min_select != null ? section.min_select : 0;
+  const maximum = section.max_select != null ? section.max_select : null;
+  const countStatus = h(doc, 'p', {
+    class: 'pi-selection-status',
+    role: 'status',
+    'aria-live': 'polite',
+  });
   const optionEls = section.options.map((opt) => {
     const id = `${section.id}-${opt.id}`;
     const attrs = { type: inputType, name: section.id, id, value: opt.id };
@@ -334,19 +477,23 @@ function render(section, ctx) {
   });
 
   const enforceMax = () => {
-    if (single || section.max_select == null) return;
     const checkedCount = boxes.filter((b) => b.checked).length;
-    const atMax = checkedCount >= section.max_select;
+    const requirement = maximum == null
+      ? `Select at least ${minimum}`
+      : `Select ${minimum}–${maximum}`;
+    countStatus.textContent = `${requirement} · ${checkedCount} selected${checkedCount >= minimum ? ' ✓' : ''}`;
+    countStatus.classList.toggle('is-ready', checkedCount >= minimum);
+    if (single || maximum == null) return;
+    const atMax = checkedCount >= maximum;
     for (const b of boxes) b.disabled = atMax && !b.checked;
   };
-  if (!single && section.max_select != null) {
-    for (const b of boxes) b.addEventListener('change', enforceMax);
-  }
+  for (const b of boxes) b.addEventListener('change', enforceMax);
 
   const children = [];
   if (section.title) children.push(h(doc, 'h2', { class: 'pi-section__title', text: section.title }));
   const fieldset = h(doc, 'fieldset', { class: 'pi-commit' }, [
     h(doc, 'legend', { text: section.prompt }),
+    countStatus,
     ...optionEls,
   ]);
   children.push(fieldset);
@@ -354,11 +501,11 @@ function render(section, ctx) {
 
   const read = () => {
     const selected = boxes.filter((b) => b.checked).map((b) => b.value);
-    const min = section.min_select != null ? section.min_select : 0;
-    const missing = selected.length < min ? [section.id] : [];
+    const missing = selected.length < minimum ? [section.id] : [];
     return { responses: { [section.id]: selected }, missing };
   };
 
+  enforceMax();
   return { el, read };
 }
 
@@ -424,6 +571,7 @@ const { h, getDoc } = __req("engine/dom.js");
 const { scoreInstrument } = __req("engine/scoring.js");
 const { render: info } = __req("engine/sections/info.js");
 const { render: scoredLikert } = __req("engine/sections/scored-likert.js");
+const { render: scoredMatrix } = __req("engine/sections/scored-matrix.js");
 const { render: selfRating } = __req("engine/sections/self-rating.js");
 const { render: selectAndCommit } = __req("engine/sections/select-and-commit.js");
 const { render: freeReflection } = __req("engine/sections/free-reflection.js");
@@ -431,6 +579,7 @@ const { render: freeReflection } = __req("engine/sections/free-reflection.js");
 const RENDERERS = {
   'info': info,
   'scored-likert': scoredLikert,
+  'scored-matrix': scoredMatrix,
   'self-rating': selfRating,
   'select-and-commit': selectAndCommit,
   'free-reflection': freeReflection,
@@ -441,7 +590,7 @@ function scaleIndex(definition) {
   const byId = {};
   const order = [];
   for (const section of definition.sections) {
-    if (section.type !== 'scored-likert') continue;
+    if (!['scored-likert', 'scored-matrix'].includes(section.type)) continue;
     for (const scale of section.scales) {
       byId[scale.id] = scale;
       order.push(scale.id);
@@ -499,9 +648,9 @@ function assembleRecord(definition, { responses, scores, bands, readout, snapsho
 /** UI labels for the taught read-out (engine copy — about the construct, never the person). */
 const READOUT_LABELS = {
   band: 'Where your answers lean',
-  explainer: 'What this is',
-  light: 'Where it helps',
-  shadow: 'Where it can get in the way',
+  explainer: 'What this measures',
+  light: 'What this result can offer',
+  shadow: 'What to keep in context',
   one_thing: 'One thing to try',
 };
 
@@ -532,22 +681,23 @@ function createEngine(definition, ctx, options = {}) {
 
   const el = h(doc, 'form', { class: 'pi-instrument', 'data-instrument': definition.id });
   const itemCount = definition.sections.reduce((total, section) => total + (section.items ? section.items.length : 0), 0);
-  const scored = definition.sections.some((section) => section.type === 'scored-likert');
+  const scored = definition.sections.some((section) => ['scored-likert', 'scored-matrix'].includes(section.type));
   const duration = {
-    bigfive: 15,
-    grit: 2,
-    'growth-mindset': 1,
-    'learner-profile': 8,
-    'self-efficacy': 2,
-    strengths: 20,
-  }[definition.id] || Math.max(2, Math.round(itemCount / 10));
+    bigfive: '18–25',
+    grit: '2–4',
+    'growth-mindset': '1–2',
+    'learner-profile': '8–12',
+    'self-efficacy': '2–4',
+    strengths: '25–35',
+    'cognitive-ability': '20–30',
+  }[definition.id] || String(Math.max(2, Math.round(itemCount / 10)));
   const hero = h(doc, 'header', { class: 'pi-instrument__hero' }, [
     h(doc, 'p', { class: 'pi-eyebrow', text: scored ? 'A private self-check' : 'A guided reflection' }),
     definition.title ? h(doc, 'h1', { class: 'pi-instrument__title', text: definition.title }) : null,
     definition.intro ? h(doc, 'p', { class: 'pi-instrument__intro', text: definition.intro }) : null,
     h(doc, 'div', { class: 'pi-meta' }, [
       itemCount ? h(doc, 'span', { class: 'pi-meta__item', text: `${itemCount} questions` }) : null,
-      h(doc, 'span', { class: 'pi-meta__item', text: `About ${duration} min` }),
+      h(doc, 'span', { class: 'pi-meta__item', text: `${duration} min · varies by pace` }),
       h(doc, 'span', { class: 'pi-meta__item', text: 'Private on this device' }),
     ]),
   ]);
@@ -608,7 +758,10 @@ function createEngine(definition, ctx, options = {}) {
       'data-band': entry.band,
     }, [
         h(doc, 'h3', { text: entry.scale_name || entry.scale }),
-        h(doc, 'p', { class: 'pi-readout__band', text: `${READOUT_LABELS.band}: ${entry.band}` }),
+        h(doc, 'p', {
+          class: 'pi-readout__band',
+          text: `${READOUT_LABELS.band}: ${entry.band.replace(/[-_]/g, ' ')}`,
+        }),
         readoutRow(doc, READOUT_LABELS.explainer, entry.construct_explainer),
         readoutRow(doc, READOUT_LABELS.light, entry.light),
         readoutRow(doc, READOUT_LABELS.shadow, entry.shadow),
@@ -775,13 +928,267 @@ function renderSaveControls(record, ctx = {}, opts = {}) {
 return { SAVE_METHODS, filenameFor, serializeRecord, manualDownload, copyForOneNote, graphSave, save, renderSaveControls };
 });
 
+__def("engine/local-store.js", function(__req){
+/**
+ * Versioned, browser-local library for completed sittings.
+ * Pure state transforms are separated from the storage adapter so the data
+ * model is testable in Node and resilient to unavailable/quota-limited storage.
+ */
+
+const LIBRARY_KEY = 'personal-inventory.library.v1';
+const ARCHIVE_FORMAT = 'personal-inventory-archive';
+const LIBRARY_VERSION = 1;
+
+const EMPTY_REFLECTION = Object.freeze({ pattern: '', shift: '', experiment: '' });
+
+function emptyState() {
+  return { version: LIBRARY_VERSION, records: [], reflection: { ...EMPTY_REFLECTION } };
+}
+
+function recordKey(record) {
+  return [
+    String(record?.instrument_id || ''),
+    String(record?.instrument_version || ''),
+    String(record?.timestamp || ''),
+  ].join('|');
+}
+
+function isRecord(value) {
+  return Boolean(
+    isPlainObject(value) &&
+    /^[a-z0-9][a-z0-9-]*$/.test(value.instrument_id || '') &&
+    /^\d+\.\d+\.\d+$/.test(value.instrument_version || '') &&
+    typeof value.timestamp === 'string' && value.timestamp.length > 0 &&
+    ['full', 'scores-only'].includes(value.variant) &&
+    isNumberMap(value.scores) &&
+    isStringMap(value.bands) &&
+    Array.isArray(value.readout) && value.readout.every(isReadoutEntry) &&
+    typeof value.student_snapshot === 'string' &&
+    (value.variant === 'full' ? isPlainObject(value.raw_responses) : value.raw_responses == null),
+  );
+}
+
+function isPlainObject(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function isNumberMap(value) {
+  return isPlainObject(value) &&
+    Object.values(value).every((entry) => typeof entry === 'number' && Number.isFinite(entry));
+}
+
+function isStringMap(value) {
+  return isPlainObject(value) && Object.values(value).every((entry) => typeof entry === 'string');
+}
+
+function isReadoutEntry(value) {
+  return isPlainObject(value) &&
+    ['scale', 'band', 'construct_explainer', 'light', 'shadow', 'one_thing_to_try']
+      .every((key) => typeof value[key] === 'string');
+}
+
+function normalizeState(value) {
+  if (!value || typeof value !== 'object') return emptyState();
+  const records = [];
+  const seen = new Set();
+  for (const record of Array.isArray(value.records) ? value.records : []) {
+    if (!isRecord(record)) continue;
+    const key = recordKey(record);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    records.push(record);
+  }
+  records.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
+  const sourceReflection = value.reflection && typeof value.reflection === 'object'
+    ? value.reflection
+    : {};
+  const reflection = {};
+  for (const key of Object.keys(EMPTY_REFLECTION)) {
+    reflection[key] = typeof sourceReflection[key] === 'string' ? sourceReflection[key] : '';
+  }
+  return { version: LIBRARY_VERSION, records, reflection };
+}
+
+function upsertRecord(state, record) {
+  const base = normalizeState(state);
+  if (!isRecord(record)) return base;
+  const key = recordKey(record);
+  const records = base.records.filter((item) => recordKey(item) !== key);
+  records.push(record);
+  records.sort((a, b) => String(a.timestamp).localeCompare(String(b.timestamp)));
+  return { ...base, records };
+}
+
+function updateReflection(state, patch) {
+  const base = normalizeState(state);
+  const reflection = { ...base.reflection };
+  for (const key of Object.keys(EMPTY_REFLECTION)) {
+    if (patch && typeof patch[key] === 'string') reflection[key] = patch[key];
+  }
+  return { ...base, reflection };
+}
+
+function importData(state, data) {
+  let base = normalizeState(state);
+  let incoming = [];
+  let reflection = null;
+  if (isRecord(data)) incoming = [data];
+  else if (Array.isArray(data)) incoming = data.filter(isRecord);
+  else if (data && typeof data === 'object' && data.format === ARCHIVE_FORMAT) {
+    incoming = Array.isArray(data.records) ? data.records.filter(isRecord) : [];
+    reflection = data.portrait_reflection;
+  } else if (data && typeof data === 'object' && Array.isArray(data.records)) {
+    incoming = data.records.filter(isRecord);
+    reflection = data.reflection;
+  }
+
+  const before = new Set(base.records.map(recordKey));
+  for (const record of incoming) base = upsertRecord(base, record);
+  if (reflection) base = updateReflection(base, reflection);
+  const added = base.records.filter((record) => !before.has(recordKey(record))).length;
+  return { state: base, added, recognized: incoming.length };
+}
+
+function serializeArchive(state, exportedAt = new Date().toISOString()) {
+  const normalized = normalizeState(state);
+  return JSON.stringify({
+    format: ARCHIVE_FORMAT,
+    version: LIBRARY_VERSION,
+    exported_at: exportedAt,
+    records: normalized.records,
+    portrait_reflection: normalized.reflection,
+  }, null, 2);
+}
+
+function archiveFilename(exportedAt = new Date().toISOString()) {
+  return `personal-inventory_backup_${String(exportedAt).slice(0, 10)}.json`;
+}
+
+function loadLibrary(storage = resolveStorage()) {
+  if (!storage) return { state: emptyState(), available: false, bytes: 0, error: null };
+  try {
+    const raw = storage.getItem(LIBRARY_KEY);
+    return {
+      state: raw ? normalizeState(JSON.parse(raw)) : emptyState(),
+      available: true,
+      bytes: raw ? raw.length : 0,
+      error: null,
+    };
+  } catch (error) {
+    return { state: emptyState(), available: false, bytes: 0, error };
+  }
+}
+
+function saveLibrary(state, storage = resolveStorage()) {
+  if (!storage) return { saved: false, bytes: 0, error: new Error('Local storage is unavailable') };
+  try {
+    const raw = JSON.stringify(normalizeState(state));
+    storage.setItem(LIBRARY_KEY, raw);
+    return { saved: true, bytes: raw.length, error: null };
+  } catch (error) {
+    return { saved: false, bytes: 0, error };
+  }
+}
+
+function clearLibrary(storage = resolveStorage()) {
+  if (!storage) return false;
+  try {
+    storage.removeItem(LIBRARY_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 KB';
+  if (bytes < 1024) return '<1 KB';
+  return `${(bytes / 1024).toFixed(bytes < 10240 ? 1 : 0)} KB`;
+}
+
+function resolveStorage() {
+  try {
+    return typeof localStorage !== 'undefined' ? localStorage : null;
+  } catch {
+    return null;
+  }
+}
+
+return { LIBRARY_KEY, ARCHIVE_FORMAT, LIBRARY_VERSION, emptyState, recordKey, isRecord, normalizeState, upsertRecord, updateReflection, importData, serializeArchive, archiveFilename, loadLibrary, saveLibrary, clearLibrary, formatBytes };
+});
+
+__def("engine/motion.js", function(__req){
+/**
+ * Progressive motion layer. The product remains fully usable without it, and
+ * all effects are disabled when the user requests reduced motion.
+ */
+function mountMotion(doc = document) {
+  const win = doc.defaultView || window;
+  if (win.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  doc.documentElement.classList.add('pi-motion-ready');
+
+  const revealTargets = Array.from(doc.querySelectorAll([
+    '.pi-assessment-card',
+    '.pi-how__step',
+    '.pi-portrait-cta',
+    '.pi-info',
+    '.pi-item',
+    '.pi-readout__scale',
+    '.pi-reveal',
+  ].join(','))).filter((node) => !node.hasAttribute('data-pi-motion'));
+  revealTargets.forEach((node, index) => {
+    node.setAttribute('data-pi-motion', '');
+    node.classList.add('pi-reveal');
+    node.style.setProperty('--reveal-delay', `${Math.min(index % 8, 5) * 45}ms`);
+  });
+
+  if ('IntersectionObserver' in win) {
+    const observer = new win.IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        entry.target.classList.add('is-visible');
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: .08, rootMargin: '0px 0px -4% 0px' });
+    revealTargets.forEach((node) => observer.observe(node));
+  } else {
+    revealTargets.forEach((node) => node.classList.add('is-visible'));
+  }
+
+  if (win.matchMedia?.('(pointer: fine)').matches) {
+    for (const card of revealTargets.filter((node) => node.matches('.pi-assessment-card'))) {
+      card.addEventListener('pointermove', (event) => {
+        const rect = card.getBoundingClientRect();
+        const x = (event.clientX - rect.left) / rect.width - .5;
+        const y = (event.clientY - rect.top) / rect.height - .5;
+        card.style.setProperty('--tilt-x', `${(-y * 4).toFixed(2)}deg`);
+        card.style.setProperty('--tilt-y', `${(x * 5).toFixed(2)}deg`);
+        card.style.setProperty('--glow-x', `${((x + .5) * 100).toFixed(0)}%`);
+        card.style.setProperty('--glow-y', `${((y + .5) * 100).toFixed(0)}%`);
+      });
+      card.addEventListener('pointerleave', () => {
+        card.style.removeProperty('--tilt-x');
+        card.style.removeProperty('--tilt-y');
+        card.style.removeProperty('--glow-x');
+        card.style.removeProperty('--glow-y');
+      });
+    }
+  }
+}
+
+return { mountMotion };
+});
+
 __def("instruments/instrument-page.js", function(__req){
 /**
  * Shared browser flow for every instrument page.
- * All work stays on the device: no network calls and no answer persistence.
+ * All work stays on the device: no network calls. Unfinished answers are
+ * ephemeral; completed sittings accumulate in the browser-local library.
  */
 const { createEngine } = __req("engine/engine.js");
 const { manualDownload, copyForOneNote } = __req("engine/save-adapter.js");
+const { archiveFilename, formatBytes, loadLibrary, saveLibrary, serializeArchive, upsertRecord } = __req("engine/local-store.js");
+const { mountMotion } = __req("engine/motion.js");
 
 function mountInstrument(definition, opts = {}) {
   const doc = document;
@@ -791,6 +1198,10 @@ function mountInstrument(definition, opts = {}) {
 
   const engine = createEngine(definition, ctx, { scoresOnly: opts.scoresOnly === true });
   const pageControllers = [];
+  let currentTimestamp = '';
+  let completed = false;
+  let dirty = false;
+  let library = loadLibrary();
 
   const sitebar = el('nav', { class: 'pi-sitebar', 'aria-label': 'Personal Inventory' });
   const brand = el('a', { class: 'pi-brand', href: '../index.html' });
@@ -803,6 +1214,7 @@ function mountInstrument(definition, opts = {}) {
   const formWrap = doc.createElement('div');
   formWrap.appendChild(engine.el);
   root.appendChild(formWrap);
+  engine.el.addEventListener('change', () => { dirty = true; });
 
   addProgress();
   paginateLongBatteries();
@@ -827,22 +1239,31 @@ function mountInstrument(definition, opts = {}) {
 
   const saveZone = el('div', { class: 'pi-save-panel' });
   saveZone.hidden = true;
+  const localStatus = el('div', { class: 'pi-local-status', role: 'status', 'aria-live': 'polite' });
   saveZone.appendChild(el('p', {
     class: 'pi-hint',
-    text: 'Keep this moment. Save the result file in your personal folder so you can compare it with a future check-in. Nothing is sent anywhere.',
+    text: 'This sitting is now in this browser’s local library. Browser data can be cleared or lost with the device, so download a backup and place it in OneDrive, Google Drive, iCloud Drive, SharePoint, or another cloud folder you trust.',
   }));
+  saveZone.appendChild(localStatus);
   const saveControls = el('div', { class: 'pi-save' });
   const saveStatus = el('p', { class: 'pi-save__status', role: 'status', 'aria-live': 'polite' });
-  const saveBtn = el('button', { type: 'button', class: 'pi-save__btn pi-save__btn--primary', text: 'Save my result' });
+  const saveBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Download this result' });
+  const backupBtn = el('button', { type: 'button', class: 'pi-save__btn pi-save__btn--primary', text: 'Download complete backup' });
   const copyBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Copy reflection for OneNote' });
-  saveControls.append(saveBtn, copyBtn, saveStatus);
+  saveControls.append(backupBtn, saveBtn, copyBtn, saveStatus);
   saveZone.appendChild(saveControls);
+  const resultActions = el('nav', { class: 'pi-result-actions', 'aria-label': 'What next' });
+  const portraitLink = el('a', { class: 'pi-btn pi-btn--primary', href: '../viewer/viewer.html', text: 'Explore my full portrait →' });
+  const homeLink = el('a', { class: 'pi-btn', href: '../index.html', text: 'Return to inventory menu' });
+  const restartBtn = el('button', { class: 'pi-btn', type: 'button', text: 'Start a new sitting' });
+  resultActions.append(portraitLink, homeLink, restartBtn);
+  saveZone.appendChild(resultActions);
   root.appendChild(saveZone);
 
   readoutBtn.addEventListener('click', () => {
     const { responses, missing } = engine.collect();
     if (missing.length) {
-      formStatus.textContent = `Almost there — ${missing.length} question${missing.length === 1 ? '' : 's'} still need an answer.`;
+      formStatus.textContent = `Almost there — ${missing.length} required response${missing.length === 1 ? '' : 's'} still need attention.`;
       const firstMissing = engine.el.querySelector('.pi-item:not(.is-answered)');
       const controller = pageControllers.find(({ items }) => items.includes(firstMissing));
       if (controller) controller.showPage(controller.pageOf(firstMissing), false);
@@ -850,23 +1271,44 @@ function mountInstrument(definition, opts = {}) {
       return;
     }
     formStatus.textContent = '';
+    currentTimestamp = new Date().toISOString();
     const { bands } = engine.score(responses);
     readoutEl.replaceChildren(engine.renderReadout(engine.buildReadout(bands)));
     reflectionWrap.hidden = false;
     saveZone.hidden = false;
     readoutBtn.hidden = true;
+    completed = true;
+    dirty = false;
+    persistCurrent();
+    mountMotion(doc);
     readoutEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
-  const buildFresh = () => engine.buildRecord({ timestamp: new Date().toISOString() });
+  const buildFresh = () => engine.buildRecord({
+    timestamp: currentTimestamp || new Date().toISOString(),
+  });
+
+  reflectionWrap.addEventListener('input', () => {
+    if (!completed) return;
+    clearTimeout(reflectionWrap._saveTimer);
+    reflectionWrap._saveTimer = setTimeout(persistCurrent, 250);
+  });
 
   saveBtn.addEventListener('click', () => {
     try {
       const { filename } = manualDownload(buildFresh(), ctx);
-      saveStatus.textContent = `Saved “${filename}”. Move it into your personal results folder to keep it.`;
+      persistCurrent();
+      saveStatus.textContent = `Downloaded “${filename}”. Keep it in a cloud folder if you want an individual copy.`;
     } catch (err) {
       saveStatus.textContent = `Could not save: ${err.message}`;
     }
+  });
+
+  backupBtn.addEventListener('click', () => {
+    persistCurrent();
+    const exportedAt = new Date().toISOString();
+    downloadText(serializeArchive(library.state, exportedAt), archiveFilename(exportedAt));
+    saveStatus.textContent = 'Complete backup downloaded. Move it to a cloud folder so a cleared browser or lost device cannot erase your history.';
   });
 
   copyBtn.addEventListener('click', async () => {
@@ -876,6 +1318,25 @@ function mountInstrument(definition, opts = {}) {
     } catch (err) {
       saveStatus.textContent = `Could not copy: ${err.message}`;
     }
+  });
+
+  restartBtn.addEventListener('click', () => {
+    if (confirm('Start a fresh sitting? Your completed result is safe in the local library, but the answers currently on this page will be reset.')) {
+      location.reload();
+    }
+  });
+
+  addKeyboardShortcuts();
+  mountMotion(doc);
+
+  addEventListener('beforeunload', (event) => {
+    if (completed) persistCurrent();
+    if (!dirty || completed) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+  addEventListener('pagehide', () => {
+    if (completed) persistCurrent();
   });
 
   return engine;
@@ -889,9 +1350,13 @@ function mountInstrument(definition, opts = {}) {
     const progressCount = el('span', { text: `0 of ${questionGroups.length}` });
     const track = el('div', { class: 'pi-progress__track' });
     const fill = el('div', { class: 'pi-progress__fill' });
-    progressCopy.append(el('span', { text: 'Your progress' }), progressCount);
+    const progressStage = el('span', { class: 'pi-progress__stage', text: 'Your progress' });
+    progressCopy.append(progressStage, progressCount);
     track.appendChild(fill);
-    progress.append(progressCopy, track);
+    progress.append(progressCopy, track, el('p', {
+      class: 'pi-progress__shortcut',
+      text: 'Keyboard: press 1–5 to answer the next visible question',
+    }));
     engine.el.insertBefore(progress, engine.el.querySelector('.pi-section'));
 
     const update = () => {
@@ -911,11 +1376,11 @@ function mountInstrument(definition, opts = {}) {
   }
 
   function paginateLongBatteries() {
-    for (const battery of engine.el.querySelectorAll('.pi-scored-likert')) {
+    for (const battery of engine.el.querySelectorAll('.pi-scored-likert, .pi-scored-matrix')) {
       const items = Array.from(battery.querySelectorAll(':scope > .pi-item'));
       if (items.length <= 12) continue;
 
-      const pageSize = 10;
+      const pageSize = battery.classList.contains('pi-scored-matrix') ? 2 : 10;
       const pages = [];
       for (let i = 0; i < items.length; i += pageSize) pages.push(items.slice(i, i + pageSize));
       let page = 0;
@@ -936,6 +1401,8 @@ function mountInstrument(definition, opts = {}) {
         next.textContent = page === pages.length - 1 ? 'Questions complete ✓' : 'Continue →';
         next.disabled = page === pages.length - 1;
         status.textContent = `Part ${page + 1} of ${pages.length} · questions ${page * pageSize + 1}–${Math.min((page + 1) * pageSize, items.length)}`;
+        const topStage = engine.el.querySelector('.pi-progress__stage');
+        if (topStage) topStage.textContent = `Part ${page + 1} of ${pages.length}`;
         error.textContent = '';
         if (shouldScroll) battery.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
@@ -960,6 +1427,52 @@ function mountInstrument(definition, opts = {}) {
     }
   }
 
+  function persistCurrent() {
+    if (!completed) return;
+    const record = buildFresh();
+    library.state = upsertRecord(library.state, record);
+    const result = saveLibrary(library.state);
+    library = { ...library, ...result, available: result.saved };
+    updateLocalStatus();
+  }
+
+  function updateLocalStatus() {
+    if (!library.available) {
+      localStatus.textContent = '⚠ Local saving is unavailable in this browser. Download your result now.';
+      localStatus.className = 'pi-local-status pi-local-status--warning';
+      return;
+    }
+    const count = library.state.records.length;
+    localStatus.textContent = `✓ Saved locally · ${count} completed sitting${count === 1 ? '' : 's'} · ${formatBytes(library.bytes)}`;
+    localStatus.className = 'pi-local-status';
+  }
+
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const link = el('a', { href, download: filename });
+    link.hidden = true;
+    doc.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
+  }
+
+  function addKeyboardShortcuts() {
+    doc.addEventListener('keydown', (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target?.tagName)) return;
+      const option = Number(event.key);
+      if (!Number.isInteger(option) || option < 1 || option > 9) return;
+      const visible = Array.from(engine.el.querySelectorAll('.pi-item:not([hidden])'));
+      const target = visible.find((item) => !item.querySelector('input:checked')) || visible[0];
+      const inputs = target ? Array.from(target.querySelectorAll('input:not(:disabled)')) : [];
+      if (!inputs[option - 1]) return;
+      inputs[option - 1].click();
+      event.preventDefault();
+    });
+  }
+
   function el(tag, attrs = {}) {
     const node = doc.createElement(tag);
     for (const [k, v] of Object.entries(attrs)) {
@@ -972,6 +1485,40 @@ function mountInstrument(definition, opts = {}) {
 }
 
 return { mountInstrument };
+});
+
+__def("instruments/landing-page.js", function(__req){
+const { formatBytes, loadLibrary } = __req("engine/local-store.js");
+const { mountMotion } = __req("engine/motion.js");
+
+function mountLanding(doc = document) {
+  const library = loadLibrary();
+  const counts = {};
+  for (const record of library.state.records) {
+    counts[record.instrument_id] = (counts[record.instrument_id] || 0) + 1;
+  }
+
+  for (const card of doc.querySelectorAll('[data-instrument]')) {
+    const count = counts[card.dataset.instrument] || 0;
+    if (!count) continue;
+    card.classList.add('is-complete');
+    const badge = doc.createElement('span');
+    badge.className = 'pi-card__complete';
+    badge.textContent = count > 1 ? `✓ Completed ${count}× · retake` : '✓ Completed · retake';
+    card.appendChild(badge);
+  }
+
+  const status = doc.querySelector('[data-library-status]');
+  if (status) {
+    const count = library.state.records.length;
+    status.textContent = library.available
+      ? `${count} sitting${count === 1 ? '' : 's'} saved locally · ${formatBytes(library.bytes)}`
+      : 'Local library unavailable — download results after each test';
+  }
+  mountMotion(doc);
+}
+
+return { mountLanding };
 });
 
 __def("viewer/viewer.js", function(__req){
@@ -1023,6 +1570,7 @@ function aggregateRecords(records) {
           timestamp: r.timestamp,
           score,
           band: (r.bands || {})[scale],
+          instrument_version: r.instrument_version,
         });
       }
       if (typeof r.student_snapshot === 'string' && r.student_snapshot.trim() !== '') {
@@ -1042,6 +1590,7 @@ function aggregateRecords(records) {
       sittings: recs.length,
       first: recs[0],
       latest: recs[recs.length - 1],
+      versions: [...new Set(recs.map((record) => record.instrument_version))],
       longitudinal,
     });
   }
@@ -1061,6 +1610,8 @@ function scaleChange(series) {
   if (!Array.isArray(series) || series.length < 2) return null;
   const first = series[0];
   const last = series[series.length - 1];
+  if (first.instrument_version && last.instrument_version &&
+      first.instrument_version !== last.instrument_version) return null;
   return {
     from: { timestamp: first.timestamp, score: first.score, band: first.band },
     to: { timestamp: last.timestamp, score: last.score, band: last.band },
@@ -1073,6 +1624,8 @@ return { aggregateRecords, scaleChange };
 
 __def("viewer/viewer-page.js", function(__req){
 const { aggregateRecords, scaleChange } = __req("viewer/viewer.js");
+const { archiveFilename, clearLibrary, formatBytes, importData, loadLibrary, saveLibrary, serializeArchive, updateReflection } = __req("engine/local-store.js");
+const { mountMotion } = __req("engine/motion.js");
 
 const INSTRUMENT_NAMES = {
   bigfive: 'Big Five',
@@ -1081,6 +1634,16 @@ const INSTRUMENT_NAMES = {
   'learner-profile': 'Learner Profile',
   'self-efficacy': 'Self-Efficacy',
   strengths: 'Character Strengths',
+  'cognitive-ability': 'Figural Reasoning',
+};
+const INSTRUMENT_ORDER = Object.keys(INSTRUMENT_NAMES);
+const BAND_POSITION = {
+  low: 16.667,
+  'building-range': 16.667,
+  balanced: 50,
+  'middle-range': 50,
+  high: 83.333,
+  'higher-range': 83.333,
 };
 
 function mountPortraitViewer(ctx = {}) {
@@ -1088,57 +1651,201 @@ function mountPortraitViewer(ctx = {}) {
   const input = doc.getElementById('files');
   const out = doc.getElementById('portrait');
   const pickLabel = doc.getElementById('file-summary');
+  const storageStatus = doc.getElementById('storage-status');
+  const exportButton = doc.getElementById('export-library');
+  const clearButton = doc.getElementById('clear-library');
   if (!input || !out) throw new Error('Portrait viewer shell is incomplete');
+
+  let library = loadLibrary();
+  renderCurrent();
 
   input.addEventListener('change', async () => {
     const files = Array.from(input.files || []);
-    if (pickLabel) pickLabel.textContent = files.length
-      ? `${files.length} result file${files.length === 1 ? '' : 's'} selected`
-      : 'Choose all the result files you want to compare';
-    const records = (await Promise.all(files.map(readRecord))).filter(Boolean);
-    render(aggregateRecords(records));
+    let added = 0;
+    let recognized = 0;
+    for (const file of files) {
+      const data = await readJson(file);
+      const imported = importData(library.state, data);
+      library.state = imported.state;
+      added += imported.added;
+      recognized += imported.recognized;
+    }
+    const saved = saveLibrary(library.state);
+    library = { ...library, ...saved, available: saved.saved };
+    if (pickLabel) {
+      pickLabel.textContent = recognized
+        ? `Imported ${added} new sitting${added === 1 ? '' : 's'} · ${recognized - added} already in your library`
+        : 'No readable Personal Inventory results were found in those files';
+    }
+    input.value = '';
+    renderCurrent();
   });
+
+  exportButton?.addEventListener('click', () => {
+    const exportedAt = new Date().toISOString();
+    downloadText(serializeArchive(library.state, exportedAt), archiveFilename(exportedAt));
+    exportButton.textContent = 'Backup downloaded ✓';
+    setTimeout(() => { exportButton.textContent = 'Download complete backup'; }, 2400);
+  });
+
+  clearButton?.addEventListener('click', () => {
+    if (!confirm('Clear every locally stored Personal Inventory result and portrait reflection from this browser? Download a backup first if you may want them later.')) return;
+    if (clearLibrary()) {
+      library = loadLibrary();
+      renderCurrent();
+    }
+  });
+
+  function renderCurrent() {
+    updateStorageStatus();
+    render(aggregateRecords(library.state.records));
+    mountMotion(doc);
+  }
+
+  function updateStorageStatus() {
+    if (!storageStatus) return;
+    if (!library.available) {
+      storageStatus.className = 'pi-storage-meter pi-storage-meter--warning';
+      storageStatus.textContent = 'Local storage unavailable — use downloaded backups';
+      return;
+    }
+    const count = library.state.records.length;
+    storageStatus.className = 'pi-storage-meter';
+    storageStatus.textContent = `Saved in this browser · ${count} sitting${count === 1 ? '' : 's'} · ${formatBytes(library.bytes)}`;
+  }
 
   function render(portrait) {
     out.replaceChildren();
     if (portrait.total === 0) {
-      out.appendChild(el('div', { class: 'pi-empty' }, [
-        el('p', { text: 'No readable results yet. Choose one or more saved .json files above.' }),
-      ]));
+      out.appendChild(renderEmptyState());
       return;
     }
 
-    out.appendChild(el('header', { class: 'pi-portrait-summary' }, [
-      el('p', { class: 'pi-eyebrow', text: 'Your collection' }),
-      el('h2', { text: `${portrait.total} moment${portrait.total === 1 ? '' : 's'} of reflection` }),
-      el('p', { text: `Across ${portrait.instruments.length} ${portrait.instruments.length === 1 ? 'lens' : 'different lenses'}. Read this as a changing record, not a fixed identity.` }),
-    ]));
+    out.appendChild(renderOverview(portrait));
+    out.appendChild(renderReflectionLab());
+
+    const heading = el('div', { class: 'pi-section-heading pi-reveal' }, [
+      el('div', {}, [
+        el('p', { class: 'pi-kicker', text: 'The individual lenses' }),
+        el('h2', { text: 'Patterns and movement' }),
+      ]),
+      el('p', { text: 'Dots show where each result band sits. When you repeat an inventory, the line connects your first and latest result and the exact raw-score change appears beside it.' }),
+    ]);
+    out.appendChild(heading);
 
     const grid = el('div', { class: 'pi-portrait-grid' });
     for (const instrument of portrait.instruments) grid.appendChild(renderInstrument(instrument, portrait));
     out.appendChild(grid);
 
-    if (portrait.snapshots.length) {
-      const reflections = el('section', { class: 'pi-reflection-archive' }, [
-        el('div', { class: 'pi-section-heading' }, [
-          el('h2', { text: 'In your own words' }),
-          el('p', { text: 'The interpretation you wrote at each sitting.' }),
-        ]),
-      ]);
-      const notes = el('div', { class: 'pi-notes-grid' });
-      for (const snapshot of portrait.snapshots) {
-        notes.appendChild(el('blockquote', { class: 'pi-snapshot' }, [
-          el('p', { text: snapshot.text }),
-          el('footer', { text: `${nameFor(snapshot.instrument_id)} · ${datePart(snapshot.timestamp)}` }),
-        ]));
-      }
-      reflections.appendChild(notes);
-      out.appendChild(reflections);
+    if (portrait.snapshots.length) out.appendChild(renderReflectionArchive(portrait.snapshots));
+  }
+
+  function renderEmptyState() {
+    return el('section', { class: 'pi-empty-state' }, [
+      el('div', { class: 'pi-empty-state__art', 'aria-hidden': 'true' }, [
+        el('span', { text: '✦' }),
+        el('span', { text: '○' }),
+        el('span', { text: '↗' }),
+      ]),
+      el('p', { class: 'pi-kicker', text: 'Your portrait starts with one sitting' }),
+      el('h2', { text: 'Nothing is stored here yet.' }),
+      el('p', { text: 'Complete an inventory and its result will appear automatically. If you completed tests before local saving was added—or on another device—bring in the individual result files or a complete backup above.' }),
+      el('div', { class: 'pi-empty-state__steps' }, [
+        el('span', { text: '1 · Complete a lens' }),
+        el('span', { text: '2 · Reflect here' }),
+        el('span', { text: '3 · Back up to cloud storage' }),
+      ]),
+      el('a', { class: 'pi-btn pi-btn--primary', href: '../index.html', text: 'Choose an inventory →' }),
+    ]);
+  }
+
+  function renderOverview(portrait) {
+    const completed = new Set(portrait.instruments.map((item) => item.instrument_id));
+    const completion = Math.round((completed.size / INSTRUMENT_ORDER.length) * 100);
+    const repeats = portrait.instruments.filter((item) => item.sittings > 1).length;
+    const firstDate = portrait.instruments.reduce((value, item) => {
+      return !value || item.first.timestamp < value ? item.first.timestamp : value;
+    }, '');
+    const latestDate = portrait.instruments.reduce((value, item) => {
+      return !value || item.latest.timestamp > value ? item.latest.timestamp : value;
+    }, '');
+
+    const overview = el('section', { class: 'pi-dashboard pi-reveal' });
+    const copy = el('div', { class: 'pi-dashboard__copy' }, [
+      el('p', { class: 'pi-eyebrow', text: 'Your living inventory' }),
+      el('h2', { text: `${portrait.total} captured moment${portrait.total === 1 ? '' : 's'}` }),
+      el('p', { text: repeats
+        ? `${repeats} ${repeats === 1 ? 'lens has' : 'lenses have'} repeat data, so change is now visible. Look for movement, then ask what was happening around each sitting.`
+        : 'This is a baseline, not a conclusion. Repeat a useful lens later to turn a snapshot into evidence of movement.' }),
+      el('div', { class: 'pi-dashboard__dates' }, [
+        el('span', { text: `First · ${datePart(firstDate)}` }),
+        el('span', { text: `Latest · ${datePart(latestDate)}` }),
+      ]),
+    ]);
+    const ring = el('div', {
+      class: 'pi-completion-ring',
+      style: `--completion:${completion * 3.6}deg`,
+      role: 'img',
+      'aria-label': `${completed.size} of ${INSTRUMENT_ORDER.length} inventories completed`,
+    }, [
+      el('strong', { text: `${completed.size}/${INSTRUMENT_ORDER.length}` }),
+      el('span', { text: 'lenses' }),
+    ]);
+    overview.append(copy, ring);
+
+    const checklist = el('div', { class: 'pi-lens-checklist' });
+    for (const id of INSTRUMENT_ORDER) {
+      checklist.appendChild(el('span', {
+        class: completed.has(id) ? 'is-complete' : '',
+        text: `${completed.has(id) ? '✓' : '○'} ${INSTRUMENT_NAMES[id]}`,
+      }));
     }
+    overview.appendChild(checklist);
+    return overview;
+  }
+
+  function renderReflectionLab() {
+    const section = el('section', { class: 'pi-reflection-lab pi-reveal' }, [
+      el('div', { class: 'pi-section-heading' }, [
+        el('div', {}, [
+          el('p', { class: 'pi-kicker', text: 'Make the data yours' }),
+          el('h2', { text: 'Reflection lab' }),
+        ]),
+        el('p', { text: 'Scores cannot know your context. These notes stay in this browser and are included in your complete backup.' }),
+      ]),
+    ]);
+    const prompts = [
+      ['pattern', 'What pattern keeps showing up?', 'Across the different lenses, I notice…'],
+      ['shift', 'What has shifted—or surprised you?', 'Compared with an earlier result or expectation…'],
+      ['experiment', 'What will you test next?', 'For the next few weeks, I will try…'],
+    ];
+    const grid = el('div', { class: 'pi-reflection-prompts' });
+    for (const [key, label, placeholder] of prompts) {
+      const textarea = el('textarea', {
+        class: 'pi-textarea',
+        rows: '5',
+        placeholder,
+        'data-reflection-key': key,
+        'aria-label': label,
+      });
+      textarea.value = library.state.reflection[key] || '';
+      textarea.addEventListener('input', () => {
+        library.state = updateReflection(library.state, { [key]: textarea.value });
+        const saved = saveLibrary(library.state);
+        library = { ...library, ...saved, available: saved.saved };
+        updateStorageStatus();
+      });
+      grid.appendChild(el('label', { class: 'pi-reflection-prompt' }, [
+        el('span', { text: label }),
+        textarea,
+      ]));
+    }
+    section.appendChild(grid);
+    return section;
   }
 
   function renderInstrument(instrument, portrait) {
-    const card = el('article', { class: 'pi-portrait-card' });
+    const card = el('article', { class: 'pi-portrait-card pi-reveal' });
     card.appendChild(el('header', { class: 'pi-portrait-card__header' }, [
       el('div', {}, [
         el('p', { class: 'pi-card__number', text: `${instrument.sittings} ${instrument.sittings === 1 ? 'SITTING' : 'SITTINGS'}` }),
@@ -1160,19 +1867,77 @@ function mountPortraitViewer(ctx = {}) {
     }
 
     const scaleNames = scaleNameMap(instrument.latest);
-    const scales = Object.keys(instrument.longitudinal);
+    const comparableLongitudinal = Object.fromEntries(
+      Object.entries(instrument.longitudinal)
+        .map(([id, series]) => [id, currentVersionSeries(series, instrument.latest.instrument_version)])
+        .filter(([, series]) => series.length),
+    );
+    const scales = Object.keys(comparableLongitudinal);
     const primaryIds = primaryScaleIds(instrument.latest);
     const visible = primaryIds.length ? scales.filter((id) => primaryIds.includes(id)) : scales;
     const details = primaryIds.length ? scales.filter((id) => !primaryIds.includes(id)) : [];
-    card.appendChild(renderScaleList(visible, instrument.longitudinal, scaleNames));
+
+    const hasComparableRepeat = Object.values(comparableLongitudinal).some((series) => series.length > 1);
+    if (hasComparableRepeat) {
+      card.appendChild(el('div', { class: 'pi-change-banner' }, [
+        el('span', { text: '↗' }),
+        el('p', { text: `Change view · ${datePart(instrument.first.timestamp)} to ${datePart(instrument.latest.timestamp)}` }),
+      ]));
+    }
+    if ((instrument.versions || []).length > 1) {
+      card.appendChild(el('p', {
+        class: 'pi-hint',
+        text: 'Scoring changed between versions, so graphs and deltas use only sittings from the latest version.',
+      }));
+    }
+    card.appendChild(renderBandGraph(visible, comparableLongitudinal, scaleNames));
+    card.appendChild(renderScaleList(visible, comparableLongitudinal, scaleNames));
 
     if (details.length) {
       card.appendChild(el('details', { class: 'pi-trajectory-details' }, [
         el('summary', { text: `Explore ${details.length} finer facets` }),
-        renderScaleList(details, instrument.longitudinal, scaleNames),
+        renderBandGraph(details, comparableLongitudinal, scaleNames),
+        renderScaleList(details, comparableLongitudinal, scaleNames),
       ]));
     }
     return card;
+  }
+
+  function renderBandGraph(ids, longitudinal, names) {
+    const graph = el('div', { class: 'pi-band-graph' });
+    graph.appendChild(el('div', { class: 'pi-band-graph__axis', 'aria-hidden': 'true' }, [
+      el('span', { text: 'Lower lean' }),
+      el('span', { text: 'Balanced' }),
+      el('span', { text: 'Higher lean' }),
+    ]));
+    for (const id of ids) {
+      const series = longitudinal[id];
+      const first = series[0];
+      const latest = series[series.length - 1];
+      const from = BAND_POSITION[first.band] ?? 50;
+      const to = BAND_POSITION[latest.band] ?? 50;
+      const row = el('div', { class: 'pi-band-graph__row' }, [
+        el('span', { class: 'pi-band-graph__label', text: names[id] || humanize(id) }),
+        el('div', {
+          class: `pi-band-graph__track${series.length > 1 ? ' has-history' : ''}`,
+          style: `--from:${from}%;--to:${to}%`,
+          role: 'img',
+          'aria-label': `${names[id] || humanize(id)}: ${first.band}${series.length > 1 ? ` to ${latest.band}` : ''}`,
+        }, [
+          el('span', { class: 'pi-band-graph__line' }),
+          el('span', { class: 'pi-band-graph__dot pi-band-graph__dot--first' }),
+          el('span', { class: 'pi-band-graph__dot pi-band-graph__dot--latest' }),
+        ]),
+      ]);
+      const change = scaleChange(series);
+      row.appendChild(el('span', {
+        class: `pi-graph-delta${change && change.delta !== 0 ? ' has-change' : ''}`,
+        text: change ? `${change.delta > 0 ? '+' : ''}${change.delta}` : '',
+        title: change ? 'Raw-score change from first to latest sitting' : '',
+      }));
+      graph.appendChild(row);
+    }
+    return graph;
   }
 
   function renderScaleList(ids, longitudinal, names) {
@@ -1188,13 +1953,16 @@ function mountPortraitViewer(ctx = {}) {
             ? `${datePart(change.from.timestamp)} → ${datePart(change.to.timestamp)}`
             : datePart(latest.timestamp) }),
         ]),
-        el('span', { class: `pi-band pi-band--${latest.band || 'unknown'}`, text: latest.band || '—' }),
+        series.length > 1 ? renderSparkline(series, names[id] || humanize(id)) : null,
+        el('span', {
+          class: `pi-band pi-band--${latest.band || 'unknown'}`,
+          text: latest.band ? humanize(latest.band) : '—',
+        }),
       ]);
       if (change) {
-        const direction = change.delta > 0 ? '+' : '';
         row.appendChild(el('span', {
           class: 'pi-delta',
-          text: `${direction}${change.delta}`,
+          text: `${change.delta > 0 ? '+' : ''}${change.delta}`,
           title: 'Change in raw score between the first and latest sitting',
         }));
       }
@@ -1203,10 +1971,68 @@ function mountPortraitViewer(ctx = {}) {
     return list;
   }
 
+  function renderSparkline(series, name) {
+    const svg = el('svg', {
+      class: 'pi-sparkline',
+      viewBox: '0 0 120 38',
+      role: 'img',
+      'aria-label': `${name} raw-score trend across ${series.length} sittings`,
+    });
+    const scores = series.map((point) => Number(point.score));
+    const min = Math.min(...scores);
+    const max = Math.max(...scores);
+    const range = Math.max(1, max - min);
+    const points = scores.map((score, index) => {
+      const x = series.length === 1 ? 60 : 5 + (index / (series.length - 1)) * 110;
+      const y = 33 - ((score - min) / range) * 28;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    svg.appendChild(el('polyline', { points: points.join(' '), fill: 'none' }));
+    for (const point of points) {
+      const [cx, cy] = point.split(',');
+      svg.appendChild(el('circle', { cx, cy, r: '2.8' }));
+    }
+    return svg;
+  }
+
+  function renderReflectionArchive(snapshots) {
+    const reflections = el('section', { class: 'pi-reflection-archive pi-reveal' }, [
+      el('div', { class: 'pi-section-heading' }, [
+        el('div', {}, [
+          el('p', { class: 'pi-kicker', text: 'Your earlier voice' }),
+          el('h2', { text: 'Reflection archive' }),
+        ]),
+        el('p', { text: 'The interpretation you wrote at each sitting, in chronological order.' }),
+      ]),
+    ]);
+    const notes = el('div', { class: 'pi-notes-grid' });
+    for (const snapshot of snapshots) {
+      notes.appendChild(el('blockquote', { class: 'pi-snapshot' }, [
+        el('p', { text: snapshot.text }),
+        el('footer', { text: `${nameFor(snapshot.instrument_id)} · ${datePart(snapshot.timestamp)}` }),
+      ]));
+    }
+    reflections.appendChild(notes);
+    return reflections;
+  }
+
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const link = el('a', { href, download: filename });
+    link.hidden = true;
+    doc.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
+  }
+
   function el(tag, attrs = {}, children = []) {
-    const node = doc.createElement(tag);
+    const node = doc.createElementNS(tag === 'svg' || tag === 'polyline' || tag === 'circle'
+      ? 'http://www.w3.org/2000/svg'
+      : 'http://www.w3.org/1999/xhtml', tag);
     for (const [key, value] of Object.entries(attrs)) {
-      if (key === 'class') node.className = value;
+      if (key === 'class') node.setAttribute('class', value);
       else if (key === 'text') node.textContent = value;
       else node.setAttribute(key, value);
     }
@@ -1215,7 +2041,7 @@ function mountPortraitViewer(ctx = {}) {
   }
 }
 
-async function readRecord(file) {
+async function readJson(file) {
   try {
     return JSON.parse(await file.text());
   } catch {
@@ -1257,11 +2083,16 @@ function primaryScaleIds(record) {
   return all;
 }
 
+function currentVersionSeries(series, version) {
+  if (!Array.isArray(series) || !series.length) return [];
+  return series.filter((point) => point.instrument_version === version);
+}
+
 return { mountPortraitViewer };
 });
 
   var PI = {};
-  ['engine/scoring.js','engine/engine.js','engine/save-adapter.js','instruments/instrument-page.js','viewer/viewer.js','viewer/viewer-page.js']
+  ['engine/scoring.js','engine/engine.js','engine/save-adapter.js','engine/local-store.js','engine/motion.js','instruments/instrument-page.js','instruments/landing-page.js','viewer/viewer.js','viewer/viewer-page.js']
     .forEach(function(k){ var m = __req(k); for (var key in m) PI[key] = m[key]; });
   (typeof window !== 'undefined' ? window : globalThis).PI = PI;
 })();

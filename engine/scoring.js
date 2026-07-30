@@ -51,6 +51,22 @@ export function scoreInstrument(definition, responses) {
   const leaves = {}; // scaleId -> { score, min, max, thresholds }  (scales with items)
 
   for (const section of definition.sections) {
+    if (section.type === 'scored-matrix') {
+      const thresholds = section.band_thresholds;
+      for (const item of section.items) {
+        if (!Object.prototype.hasOwnProperty.call(responses, item.id)) {
+          throw new Error(`missing response for item "${item.id}"`);
+        }
+        const raw = responses[item.id];
+        if (typeof raw !== 'string' || !/^[01]{20}$/.test(raw)) {
+          throw new Error(`response "${item.id}" is not a 20-element construction`);
+        }
+        const leaf = leaves[item.scale] || (leaves[item.scale] = { score: 0, min: 0, max: 0, thresholds });
+        leaf.score += raw === item.solution ? 1 : 0;
+        leaf.max += 1;
+      }
+      continue;
+    }
     if (section.type !== 'scored-likert') continue;
     const thresholds = section.band_thresholds;
     section.items.forEach((item, i) => {
@@ -72,7 +88,7 @@ export function scoreInstrument(definition, responses) {
   // Domain rollups: a facet declares `parent`; the domain sums its facets.
   const domains = {}; // domainId -> { score, min, max, thresholds }
   for (const section of definition.sections) {
-    if (section.type !== 'scored-likert') continue;
+    if (!['scored-likert', 'scored-matrix'].includes(section.type)) continue;
     for (const scale of section.scales) {
       if (!scale.parent) continue;
       const leaf = leaves[scale.id];

@@ -1,9 +1,12 @@
 /**
  * Shared browser flow for every instrument page.
- * All work stays on the device: no network calls and no answer persistence.
+ * All work stays on the device: no network calls. Unfinished answers are
+ * ephemeral; completed sittings accumulate in the browser-local library.
  */
 import { createEngine } from '../engine/engine.js';
 import { manualDownload, copyForOneNote } from '../engine/save-adapter.js';
+import { archiveFilename, formatBytes, loadLibrary, saveLibrary, serializeArchive, upsertRecord } from '../engine/local-store.js';
+import { mountMotion } from '../engine/motion.js';
 
 export function mountInstrument(definition, opts = {}) {
   const doc = document;
@@ -13,6 +16,10 @@ export function mountInstrument(definition, opts = {}) {
 
   const engine = createEngine(definition, ctx, { scoresOnly: opts.scoresOnly === true });
   const pageControllers = [];
+  let currentTimestamp = '';
+  let completed = false;
+  let dirty = false;
+  let library = loadLibrary();
 
   const sitebar = el('nav', { class: 'pi-sitebar', 'aria-label': 'Personal Inventory' });
   const brand = el('a', { class: 'pi-brand', href: '../index.html' });
@@ -25,6 +32,7 @@ export function mountInstrument(definition, opts = {}) {
   const formWrap = doc.createElement('div');
   formWrap.appendChild(engine.el);
   root.appendChild(formWrap);
+  engine.el.addEventListener('change', () => { dirty = true; });
 
   addProgress();
   paginateLongBatteries();
@@ -49,22 +57,31 @@ export function mountInstrument(definition, opts = {}) {
 
   const saveZone = el('div', { class: 'pi-save-panel' });
   saveZone.hidden = true;
+  const localStatus = el('div', { class: 'pi-local-status', role: 'status', 'aria-live': 'polite' });
   saveZone.appendChild(el('p', {
     class: 'pi-hint',
-    text: 'Keep this moment. Save the result file in your personal folder so you can compare it with a future check-in. Nothing is sent anywhere.',
+    text: 'This sitting is now in this browser’s local library. Browser data can be cleared or lost with the device, so download a backup and place it in OneDrive, Google Drive, iCloud Drive, SharePoint, or another cloud folder you trust.',
   }));
+  saveZone.appendChild(localStatus);
   const saveControls = el('div', { class: 'pi-save' });
   const saveStatus = el('p', { class: 'pi-save__status', role: 'status', 'aria-live': 'polite' });
-  const saveBtn = el('button', { type: 'button', class: 'pi-save__btn pi-save__btn--primary', text: 'Save my result' });
+  const saveBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Download this result' });
+  const backupBtn = el('button', { type: 'button', class: 'pi-save__btn pi-save__btn--primary', text: 'Download complete backup' });
   const copyBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Copy reflection for OneNote' });
-  saveControls.append(saveBtn, copyBtn, saveStatus);
+  saveControls.append(backupBtn, saveBtn, copyBtn, saveStatus);
   saveZone.appendChild(saveControls);
+  const resultActions = el('nav', { class: 'pi-result-actions', 'aria-label': 'What next' });
+  const portraitLink = el('a', { class: 'pi-btn pi-btn--primary', href: '../viewer/viewer.html', text: 'Explore my full portrait →' });
+  const homeLink = el('a', { class: 'pi-btn', href: '../index.html', text: 'Return to inventory menu' });
+  const restartBtn = el('button', { class: 'pi-btn', type: 'button', text: 'Start a new sitting' });
+  resultActions.append(portraitLink, homeLink, restartBtn);
+  saveZone.appendChild(resultActions);
   root.appendChild(saveZone);
 
   readoutBtn.addEventListener('click', () => {
     const { responses, missing } = engine.collect();
     if (missing.length) {
-      formStatus.textContent = `Almost there — ${missing.length} question${missing.length === 1 ? '' : 's'} still need an answer.`;
+      formStatus.textContent = `Almost there — ${missing.length} required response${missing.length === 1 ? '' : 's'} still need attention.`;
       const firstMissing = engine.el.querySelector('.pi-item:not(.is-answered)');
       const controller = pageControllers.find(({ items }) => items.includes(firstMissing));
       if (controller) controller.showPage(controller.pageOf(firstMissing), false);
@@ -72,23 +89,44 @@ export function mountInstrument(definition, opts = {}) {
       return;
     }
     formStatus.textContent = '';
+    currentTimestamp = new Date().toISOString();
     const { bands } = engine.score(responses);
     readoutEl.replaceChildren(engine.renderReadout(engine.buildReadout(bands)));
     reflectionWrap.hidden = false;
     saveZone.hidden = false;
     readoutBtn.hidden = true;
+    completed = true;
+    dirty = false;
+    persistCurrent();
+    mountMotion(doc);
     readoutEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
-  const buildFresh = () => engine.buildRecord({ timestamp: new Date().toISOString() });
+  const buildFresh = () => engine.buildRecord({
+    timestamp: currentTimestamp || new Date().toISOString(),
+  });
+
+  reflectionWrap.addEventListener('input', () => {
+    if (!completed) return;
+    clearTimeout(reflectionWrap._saveTimer);
+    reflectionWrap._saveTimer = setTimeout(persistCurrent, 250);
+  });
 
   saveBtn.addEventListener('click', () => {
     try {
       const { filename } = manualDownload(buildFresh(), ctx);
-      saveStatus.textContent = `Saved “${filename}”. Move it into your personal results folder to keep it.`;
+      persistCurrent();
+      saveStatus.textContent = `Downloaded “${filename}”. Keep it in a cloud folder if you want an individual copy.`;
     } catch (err) {
       saveStatus.textContent = `Could not save: ${err.message}`;
     }
+  });
+
+  backupBtn.addEventListener('click', () => {
+    persistCurrent();
+    const exportedAt = new Date().toISOString();
+    downloadText(serializeArchive(library.state, exportedAt), archiveFilename(exportedAt));
+    saveStatus.textContent = 'Complete backup downloaded. Move it to a cloud folder so a cleared browser or lost device cannot erase your history.';
   });
 
   copyBtn.addEventListener('click', async () => {
@@ -98,6 +136,25 @@ export function mountInstrument(definition, opts = {}) {
     } catch (err) {
       saveStatus.textContent = `Could not copy: ${err.message}`;
     }
+  });
+
+  restartBtn.addEventListener('click', () => {
+    if (confirm('Start a fresh sitting? Your completed result is safe in the local library, but the answers currently on this page will be reset.')) {
+      location.reload();
+    }
+  });
+
+  addKeyboardShortcuts();
+  mountMotion(doc);
+
+  addEventListener('beforeunload', (event) => {
+    if (completed) persistCurrent();
+    if (!dirty || completed) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+  addEventListener('pagehide', () => {
+    if (completed) persistCurrent();
   });
 
   return engine;
@@ -111,9 +168,13 @@ export function mountInstrument(definition, opts = {}) {
     const progressCount = el('span', { text: `0 of ${questionGroups.length}` });
     const track = el('div', { class: 'pi-progress__track' });
     const fill = el('div', { class: 'pi-progress__fill' });
-    progressCopy.append(el('span', { text: 'Your progress' }), progressCount);
+    const progressStage = el('span', { class: 'pi-progress__stage', text: 'Your progress' });
+    progressCopy.append(progressStage, progressCount);
     track.appendChild(fill);
-    progress.append(progressCopy, track);
+    progress.append(progressCopy, track, el('p', {
+      class: 'pi-progress__shortcut',
+      text: 'Keyboard: press 1–5 to answer the next visible question',
+    }));
     engine.el.insertBefore(progress, engine.el.querySelector('.pi-section'));
 
     const update = () => {
@@ -133,11 +194,11 @@ export function mountInstrument(definition, opts = {}) {
   }
 
   function paginateLongBatteries() {
-    for (const battery of engine.el.querySelectorAll('.pi-scored-likert')) {
+    for (const battery of engine.el.querySelectorAll('.pi-scored-likert, .pi-scored-matrix')) {
       const items = Array.from(battery.querySelectorAll(':scope > .pi-item'));
       if (items.length <= 12) continue;
 
-      const pageSize = 10;
+      const pageSize = battery.classList.contains('pi-scored-matrix') ? 2 : 10;
       const pages = [];
       for (let i = 0; i < items.length; i += pageSize) pages.push(items.slice(i, i + pageSize));
       let page = 0;
@@ -158,6 +219,8 @@ export function mountInstrument(definition, opts = {}) {
         next.textContent = page === pages.length - 1 ? 'Questions complete ✓' : 'Continue →';
         next.disabled = page === pages.length - 1;
         status.textContent = `Part ${page + 1} of ${pages.length} · questions ${page * pageSize + 1}–${Math.min((page + 1) * pageSize, items.length)}`;
+        const topStage = engine.el.querySelector('.pi-progress__stage');
+        if (topStage) topStage.textContent = `Part ${page + 1} of ${pages.length}`;
         error.textContent = '';
         if (shouldScroll) battery.scrollIntoView({ behavior: 'smooth', block: 'start' });
       };
@@ -180,6 +243,52 @@ export function mountInstrument(definition, opts = {}) {
       });
       showPage(0);
     }
+  }
+
+  function persistCurrent() {
+    if (!completed) return;
+    const record = buildFresh();
+    library.state = upsertRecord(library.state, record);
+    const result = saveLibrary(library.state);
+    library = { ...library, ...result, available: result.saved };
+    updateLocalStatus();
+  }
+
+  function updateLocalStatus() {
+    if (!library.available) {
+      localStatus.textContent = '⚠ Local saving is unavailable in this browser. Download your result now.';
+      localStatus.className = 'pi-local-status pi-local-status--warning';
+      return;
+    }
+    const count = library.state.records.length;
+    localStatus.textContent = `✓ Saved locally · ${count} completed sitting${count === 1 ? '' : 's'} · ${formatBytes(library.bytes)}`;
+    localStatus.className = 'pi-local-status';
+  }
+
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const link = el('a', { href, download: filename });
+    link.hidden = true;
+    doc.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(href);
+  }
+
+  function addKeyboardShortcuts() {
+    doc.addEventListener('keydown', (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      if (/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target?.tagName)) return;
+      const option = Number(event.key);
+      if (!Number.isInteger(option) || option < 1 || option > 9) return;
+      const visible = Array.from(engine.el.querySelectorAll('.pi-item:not([hidden])'));
+      const target = visible.find((item) => !item.querySelector('input:checked')) || visible[0];
+      const inputs = target ? Array.from(target.querySelectorAll('input:not(:disabled)')) : [];
+      if (!inputs[option - 1]) return;
+      inputs[option - 1].click();
+      event.preventDefault();
+    });
   }
 
   function el(tag, attrs = {}) {

@@ -302,7 +302,7 @@ await gate('page:sync', () => {
 /* 9. viewer aggregation — the viewer aggregates the test record folder correctly */
 await gate('viewer:aggregate', async () => {
   if (!existsSync(p('viewer', 'viewer.js'))) return { skip: true, detail: 'viewer not built yet' };
-  const { aggregateRecords } = await import(pathToFileURL(p('viewer', 'viewer.js')).href);
+  const { aggregateRecords, scaleChange } = await import(pathToFileURL(p('viewer', 'viewer.js')).href);
   const files = listJSON(p('test', 'records'));
   const records = files.map((f) => readJSON(p('test', 'records', f)));
   const portrait = aggregateRecords(records);
@@ -312,7 +312,74 @@ await gate('viewer:aggregate', async () => {
   // 0-record case must not throw and must be empty
   const empty = aggregateRecords([]);
   if (empty.total !== 0 || empty.instruments.length !== 0) fail('aggregate([]) is not empty');
+  if (scaleChange([
+    { timestamp: '2026-01-01', score: 3, instrument_version: '1.0.0' },
+    { timestamp: '2027-01-01', score: 8, instrument_version: '2.0.0' },
+  ]) !== null) fail('scaleChange compared incompatible instrument versions');
   return { detail: `${records.length} record(s) -> ${portrait.instruments.length} instrument(s), ${portrait.snapshots.length} snapshot(s), ${portrait.commitments.length} commitment(s)` };
+});
+
+/* 10. local library — completed sittings accumulate, replace by identity, and
+   round-trip through the portable archive format without needing a browser. */
+await gate('library:local', async () => {
+  const modulePath = p('engine', 'local-store.js');
+  if (!existsSync(modulePath)) return { skip: true, detail: 'engine/local-store.js not built yet' };
+  const { emptyState, upsertRecord, importData, serializeArchive } =
+    await import(pathToFileURL(modulePath).href);
+  const first = SAMPLE_RECORDS[0];
+  const later = { ...SAMPLE_RECORDS[0], timestamp: '2027-08-20T09:00:00Z', scores: { order: 5 } };
+  const revisedFirst = { ...first, student_snapshot: 'Updated reflection.' };
+
+  let state = emptyState();
+  state = upsertRecord(state, first);
+  state = upsertRecord(state, later);
+  state = upsertRecord(state, revisedFirst);
+  if (state.records.length !== 2) fail(`upsert should keep 2 unique sittings, got ${state.records.length}`);
+  if (state.records[0].student_snapshot !== 'Updated reflection.') fail('upsert did not replace the matching sitting');
+
+  const archive = JSON.parse(serializeArchive({
+    ...state,
+    reflection: { pattern: 'I notice a pattern.', shift: '', experiment: '' },
+  }, '2028-01-02T00:00:00Z'));
+  if (archive.format !== 'personal-inventory-archive' || archive.records.length !== 2) {
+    fail('archive shape or record count is wrong');
+  }
+  const imported = importData(emptyState(), archive);
+  if (imported.state.records.length !== 2 || imported.state.reflection.pattern !== 'I notice a pattern.') {
+    fail('archive did not round-trip records and portrait reflection');
+  }
+  const duplicate = importData(imported.state, first);
+  if (duplicate.state.records.length !== 2) fail('single-record import created a duplicate');
+  const malformed = importData(imported.state, {
+    ...first,
+    readout: { not: 'an array' },
+  });
+  if (malformed.recognized !== 0 || malformed.state.records.length !== 2) {
+    fail('malformed record was accepted into the local library');
+  }
+  return { detail: 'upsert, validation, deduplication, reflection, and archive round-trip passed' };
+});
+
+/* 11. matrix scoring — every published key scores full credit, while an
+   impossible all-empty construction scores zero. This catches response-format
+   and exact-match regressions in the cognitive reasoning instrument. */
+await gate('matrix:scoring', async () => {
+  const definition = readJSON(p('definitions', 'cognitive-ability.json'));
+  const { scoreInstrument } = await import(pathToFileURL(p('engine', 'scoring.js')).href);
+  const section = definition.sections.find((entry) => entry.type === 'scored-matrix');
+  if (!section) fail('cognitive-ability has no scored-matrix section');
+
+  const correct = Object.fromEntries(section.items.map((item) => [item.id, item.solution]));
+  const wrong = Object.fromEntries(section.items.map((item) => [item.id, '00000000000000000000']));
+  const full = scoreInstrument(definition, correct);
+  const zero = scoreInstrument(definition, wrong);
+  if (full.scores['figural-reasoning'] !== section.items.length) {
+    fail(`published keys scored ${full.scores['figural-reasoning']} / ${section.items.length}`);
+  }
+  if (zero.scores['figural-reasoning'] !== 0) {
+    fail(`empty constructions should score 0, got ${zero.scores['figural-reasoning']}`);
+  }
+  return { detail: `${section.items.length} published solutions exact-matched correctly` };
 });
 
 function scanPII(node, path, label, hits) {
