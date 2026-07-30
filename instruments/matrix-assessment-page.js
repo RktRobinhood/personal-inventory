@@ -269,6 +269,7 @@ export function mountMatrixAssessment(definition, opts = {}) {
       });
       choice.setAttribute('aria-label', `Toggle construction element ${elementIndex + 1}`);
       choice.setAttribute('aria-pressed', 'false');
+      choice.style.setProperty('--element-delay', `${elementIndex * 18}ms`);
       choice.appendChild(drawElement(doc, elementIndex, 'pi-exam-element__svg'));
       palette.appendChild(choice);
     }

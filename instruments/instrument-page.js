@@ -228,8 +228,16 @@ export function mountInstrument(definition, opts = {}) {
       const showPage = (index, shouldScroll = false) => {
         page = Math.max(0, Math.min(index, pages.length - 1));
         pages.forEach((group, groupIndex) => {
-          for (const item of group) item.hidden = groupIndex !== page;
+          for (const [itemIndex, item] of group.entries()) {
+            item.hidden = groupIndex !== page;
+            if (groupIndex === page) {
+              item.classList.remove('pi-page-enter');
+              item.style.setProperty('--page-item-delay', `${Math.min(itemIndex, 7) * 45}ms`);
+            }
+          }
         });
+        void battery.offsetWidth;
+        for (const item of pages[page]) item.classList.add('pi-page-enter');
         back.disabled = page === 0;
         next.textContent = page === pages.length - 1 ? 'Questions complete ✓' : 'Continue →';
         next.disabled = page === pages.length - 1;
