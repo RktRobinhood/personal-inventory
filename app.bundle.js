@@ -1233,8 +1233,10 @@ function createEngine(definition, ctx, options = {}) {
     const byLevel = (level) => readout.filter((entry) => entry.level === level);
     const metatraits = byLevel('metatrait');
     if (metatraits.length) {
-      wrap.appendChild(levelBlock('Metatraits', LEVEL_INTRO.metatrait,
+      wrap.appendChild(levelBlock('Level 1 · Metatraits', LEVEL_INTRO.metatrait,
         h(doc, 'div', { class: 'pi-readout__grid' }, metatraits.map((entry) => card(entry, 'full')))));
+      wrap.appendChild(h(doc, 'h4', { class: 'pi-sublevel pi-sublevel--major', text: 'Level 2–4 · Each domain, with its aspects and facets underneath' }));
+      wrap.appendChild(h(doc, 'p', { class: 'pi-sublevel__intro', text: `${LEVEL_INTRO.aspect} ${LEVEL_INTRO.facet}` }));
     }
 
     for (const domain of byLevel('domain')) {
@@ -1244,13 +1246,25 @@ function createEngine(definition, ctx, options = {}) {
       block.appendChild(h(doc, 'div', { class: 'pi-readout__grid pi-readout__grid--single' }, [card(domain, 'full')]));
       const note = spreadNote(domain, aspects, facets);
       if (note) block.appendChild(h(doc, 'p', { class: 'pi-spread-note' }, note));
-      if (aspects.length) {
-        block.appendChild(h(doc, 'h4', { class: 'pi-sublevel', text: `The two aspects of ${domain.scale_name}` }));
-        block.appendChild(h(doc, 'div', { class: 'pi-readout__grid' }, aspects.map((entry) => card(entry, 'full'))));
-      }
-      if (facets.length) {
-        block.appendChild(h(doc, 'h4', { class: 'pi-sublevel', text: `The six facets of ${domain.scale_name}` }));
-        block.appendChild(h(doc, 'div', { class: 'pi-readout__grid pi-readout__grid--compact' }, facets.map((entry) => card(entry, 'compact'))));
+      // Everything below the domain goes inside an indented rail, so that "these
+      // belong to the domain above" is visible rather than merely stated.
+      if (aspects.length || facets.length) {
+        const children = h(doc, 'div', { class: 'pi-children' });
+        if (aspects.length) {
+          children.appendChild(h(doc, 'h5', { class: 'pi-children__label' }, [
+            h(doc, 'span', { class: 'pi-children__count', text: String(aspects.length) }),
+            ` aspects of ${domain.scale_name}`,
+          ]));
+          children.appendChild(h(doc, 'div', { class: 'pi-readout__grid' }, aspects.map((entry) => card(entry, 'medium'))));
+        }
+        if (facets.length) {
+          children.appendChild(h(doc, 'h5', { class: 'pi-children__label' }, [
+            h(doc, 'span', { class: 'pi-children__count', text: String(facets.length) }),
+            ` facets of ${domain.scale_name}`,
+          ]));
+          children.appendChild(h(doc, 'div', { class: 'pi-readout__grid pi-readout__grid--compact' }, facets.map((entry) => card(entry, 'compact'))));
+        }
+        block.appendChild(children);
       }
       wrap.appendChild(block);
     }
@@ -1268,7 +1282,7 @@ function createEngine(definition, ctx, options = {}) {
       frag.appendChild(primaryGrid);
       if (detail.length) {
         const detailGrid = h(doc, 'div', { class: 'pi-readout__grid' });
-        for (const entry of detail) detailGrid.appendChild(card(entry, 'full'));
+        for (const entry of detail) detailGrid.appendChild(card(entry, 'medium'));
         frag.appendChild(h(doc, 'details', { class: 'pi-readout__details' }, [
           h(doc, 'summary', { text: `Explore the finer detail · ${detail.length} facets` }),
           detailGrid,
@@ -1285,34 +1299,59 @@ function createEngine(definition, ctx, options = {}) {
       ]);
     }
 
+    /**
+     * One scale card. `density` drives how much of the teaching copy is open by
+     * default, and the level drives the card's visual weight — a facet must not
+     * look like a domain, or the hierarchy is invisible.
+     *   full    — metatraits and domains: everything open
+     *   medium  — aspects: explainer open, light/shadow/try behind a disclosure
+     *   compact — facets: everything behind a disclosure
+     */
     function card(entry, density) {
-      const compact = density === 'compact';
       const teaching = [
         readoutRow(doc, READOUT_LABELS.light, entry.light),
         readoutRow(doc, READOUT_LABELS.shadow, entry.shadow),
         readoutRow(doc, READOUT_LABELS.one_thing, entry.one_thing_to_try),
       ];
+      const explainer = readoutRow(doc, READOUT_LABELS.explainer, entry.construct_explainer);
+      const body = density === 'full'
+        ? [explainer, ...teaching]
+        : density === 'medium'
+          ? [explainer, h(doc, 'details', { class: 'pi-readout__more' }, [
+            h(doc, 'summary', { text: 'Light, shadow, and one thing to try' }),
+            ...teaching,
+          ])]
+          : [h(doc, 'details', { class: 'pi-readout__more' }, [
+            h(doc, 'summary', { text: 'What this measures, and what to do with it' }),
+            explainer, ...teaching,
+          ])];
+
       return h(doc, 'article', {
-        class: `pi-readout__scale${compact ? ' pi-readout__scale--compact' : ''}`,
+        class: `pi-readout__scale pi-readout__scale--${density}`,
         'data-band': entry.band,
         'data-level': entry.level || '',
       }, [
         h(doc, 'div', { class: 'pi-readout__scale-head' }, [
-          h(doc, 'h3', { text: entry.scale_name || entry.scale }),
-          entry.level ? h(doc, 'span', { class: 'pi-level-tag', text: LEVEL_LABEL[entry.level] || entry.level }) : null,
+          h(doc, 'div', { class: 'pi-readout__scale-id' }, [
+            entry.level ? h(doc, 'span', { class: 'pi-level-tag', text: LEVEL_LABEL[entry.level] || entry.level }) : null,
+            h(doc, 'h3', { text: entry.scale_name || entry.scale }),
+          ]),
+          scoreBadge(entry),
         ]),
         spectrumBar(entry),
         h(doc, 'p', { class: 'pi-readout__band' }, [
-          h(doc, 'strong', { text: `${BAND_LABEL[entry.band] || entry.band}` }),
-          ` · ${ordinal(entry.percentile)} percentile (likely range ${Math.round(entry.percentile_low)}–${Math.round(entry.percentile_high)})`,
+          h(doc, 'strong', { class: `pi-band-chip pi-band-chip--${entry.band}`, text: BAND_LABEL[entry.band] || entry.band }),
+          h(doc, 'span', { class: 'pi-readout__range', text: `likely ${Math.round(entry.percentile_low)}–${Math.round(entry.percentile_high)}` }),
         ]),
-        readoutRow(doc, READOUT_LABELS.explainer, entry.construct_explainer),
-        compact
-          ? h(doc, 'details', { class: 'pi-readout__more' }, [
-            h(doc, 'summary', { text: 'Light, shadow, and one thing to try' }),
-            ...teaching,
-          ])
-          : h(doc, 'div', {}, teaching),
+        ...body,
+      ]);
+    }
+
+    /** The percentile as the loudest thing on the card, so a profile is scannable. */
+    function scoreBadge(entry) {
+      return h(doc, 'div', { class: 'pi-scale-score' }, [
+        h(doc, 'span', { class: 'pi-scale-score__num', text: String(Math.round(entry.percentile)) }),
+        h(doc, 'span', { class: 'pi-scale-score__sub', text: 'percentile' }),
       ]);
     }
 
@@ -1320,7 +1359,7 @@ function createEngine(definition, ctx, options = {}) {
       const pct = clamp(entry.percentile);
       const lo = clamp(entry.percentile_low);
       const hi = clamp(entry.percentile_high);
-      const bar = h(doc, 'div', { class: 'pi-spectrum' }, [
+      return h(doc, 'div', { class: 'pi-spectrum' }, [
         entry.spectrum ? h(doc, 'div', { class: 'pi-spectrum__poles' }, [
           h(doc, 'span', { text: entry.spectrum.low_end }),
           h(doc, 'span', { text: entry.spectrum.high_end }),
@@ -1330,12 +1369,16 @@ function createEngine(definition, ctx, options = {}) {
           role: 'img',
           'aria-label': `${entry.scale_name}: ${ordinal(pct)} percentile, likely range ${Math.round(lo)} to ${Math.round(hi)}`,
         }, [
-          h(doc, 'span', { class: 'pi-spectrum__mid', 'aria-hidden': 'true' }),
+          // Quartile ticks give the eye something to measure against; the centre
+          // line marks the middle of the comparison group.
+          ...[25, 50, 75].map((at) => h(doc, 'span', {
+            class: `pi-spectrum__tick${at === 50 ? ' pi-spectrum__tick--mid' : ''}`,
+            style: `left:${at}%`, 'aria-hidden': 'true',
+          })),
           h(doc, 'span', { class: 'pi-spectrum__range', style: `left:${lo}%;width:${Math.max(hi - lo, 1)}%`, 'aria-hidden': 'true' }),
-          h(doc, 'span', { class: 'pi-spectrum__marker', style: `left:${pct}%`, 'aria-hidden': 'true' }),
+          h(doc, 'span', { class: `pi-spectrum__marker pi-spectrum__marker--${entry.band}`, style: `left:${pct}%`, 'aria-hidden': 'true' }),
         ]),
       ]);
-      return bar;
     }
 
     function normPicker(list, current, onSelect) {
@@ -1948,6 +1991,7 @@ function mountInstrument(definition, opts = {}) {
   const pageControllers = [];
   let currentTimestamp = '';
   let currentNormGroup = engine.defaultNormGroup;
+  let answersWrap = null;
   let completed = false;
   let dirty = false;
   let library = loadLibrary();
@@ -2007,7 +2051,8 @@ function mountInstrument(definition, opts = {}) {
   const saveBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Download this result' });
   const backupBtn = el('button', { type: 'button', class: 'pi-save__btn pi-save__btn--primary', text: 'Download complete backup' });
   const copyBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Copy reflection for OneNote' });
-  saveControls.append(backupBtn, saveBtn, copyBtn, saveStatus);
+  const printBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Print / save as PDF' });
+  saveControls.append(backupBtn, saveBtn, copyBtn, printBtn, saveStatus);
   saveZone.appendChild(saveControls);
   const resultActions = el('nav', { class: 'pi-result-actions', 'aria-label': 'What next' });
   const portraitLink = el('a', { class: 'pi-btn pi-btn--primary', href: '../viewer/viewer.html', text: 'Explore my full portrait →' });
@@ -2030,6 +2075,7 @@ function mountInstrument(definition, opts = {}) {
     formStatus.textContent = '';
     currentTimestamp = new Date().toISOString();
     paintReadout(responses);
+    stowQuestionnaire();
     reflectionWrap.hidden = false;
     saveZone.hidden = false;
     readoutBtn.hidden = true;
@@ -2045,6 +2091,42 @@ function mountInstrument(definition, opts = {}) {
     timestamp: currentTimestamp || new Date().toISOString(),
     normGroup: currentNormGroup,
   });
+
+  /**
+   * Once the read-out exists, the questionnaire is no longer the page — it is
+   * reference material. Fold it (and the progress meter, and the teaching cards
+   * that set the test up) into one collapsed disclosure below the result, so the
+   * result is what is on screen. Answers stay live: reopening and changing one
+   * re-scores immediately.
+   */
+  function stowQuestionnaire() {
+    if (answersWrap) return;
+    const progress = engine.el.querySelector('.pi-progress');
+    if (progress) progress.hidden = true;
+    for (const pager of engine.el.querySelectorAll('.pi-pager')) pager.hidden = true;
+    for (const controller of pageControllers) controller.showAll();
+
+    const hero = engine.el.querySelector('.pi-instrument__hero');
+    if (hero) root.insertBefore(hero, root.firstChild);
+
+    const itemCount = engine.el.querySelectorAll('.pi-item').length;
+    answersWrap = el('details', { class: 'pi-answers' });
+    answersWrap.appendChild(el('summary', {
+      text: itemCount ? `Your answers · ${itemCount} questions — open to review or change one` : 'Your answers — open to review or change',
+    }));
+    root.appendChild(answersWrap);
+    answersWrap.appendChild(formWrap);
+    // A changed answer must move the result, not just the form.
+    answersWrap.addEventListener('change', () => {
+      if (!completed) return;
+      const { missing } = engine.collect();
+      if (missing.length) return;
+      currentTimestamp = new Date().toISOString();
+      paintReadout(engine.collect().responses);
+      persistCurrent();
+      mountMotion(doc);
+    });
+  }
 
   /**
    * Score, teach, and (for normed instruments) let the student swap the
@@ -2096,6 +2178,21 @@ function mountInstrument(definition, opts = {}) {
     } catch (err) {
       saveStatus.textContent = `Could not copy: ${err.message}`;
     }
+  });
+
+  printBtn.addEventListener('click', () => { doc.defaultView.print(); });
+
+  /* A closed <details> is hidden by the browser itself, not by our CSS, so print
+     styles cannot reveal it. Open them all for the print, then put back exactly
+     the ones that were closed — the teaching copy is the reason to print at all. */
+  let reclose = [];
+  addEventListener('beforeprint', () => {
+    reclose = [...readoutEl.querySelectorAll('details:not([open])')];
+    for (const d of reclose) d.open = true;
+  });
+  addEventListener('afterprint', () => {
+    for (const d of reclose) d.open = false;
+    reclose = [];
   });
 
   restartBtn.addEventListener('click', () => {
@@ -2202,6 +2299,9 @@ function mountInstrument(definition, opts = {}) {
         items,
         showPage,
         pageOf: (item) => pages.findIndex((group) => group.includes(item)),
+        // After the read-out the pager is gone, so every item has to be visible
+        // at once for review.
+        showAll: () => { for (const item of items) item.hidden = false; },
       });
 
       back.addEventListener('click', () => showPage(page - 1, true));

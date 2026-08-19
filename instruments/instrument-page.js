@@ -18,6 +18,7 @@ export function mountInstrument(definition, opts = {}) {
   const pageControllers = [];
   let currentTimestamp = '';
   let currentNormGroup = engine.defaultNormGroup;
+  let answersWrap = null;
   let completed = false;
   let dirty = false;
   let library = loadLibrary();
@@ -77,7 +78,8 @@ export function mountInstrument(definition, opts = {}) {
   const saveBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Download this result' });
   const backupBtn = el('button', { type: 'button', class: 'pi-save__btn pi-save__btn--primary', text: 'Download complete backup' });
   const copyBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Copy reflection for OneNote' });
-  saveControls.append(backupBtn, saveBtn, copyBtn, saveStatus);
+  const printBtn = el('button', { type: 'button', class: 'pi-save__btn', text: 'Print / save as PDF' });
+  saveControls.append(backupBtn, saveBtn, copyBtn, printBtn, saveStatus);
   saveZone.appendChild(saveControls);
   const resultActions = el('nav', { class: 'pi-result-actions', 'aria-label': 'What next' });
   const portraitLink = el('a', { class: 'pi-btn pi-btn--primary', href: '../viewer/viewer.html', text: 'Explore my full portrait →' });
@@ -100,6 +102,7 @@ export function mountInstrument(definition, opts = {}) {
     formStatus.textContent = '';
     currentTimestamp = new Date().toISOString();
     paintReadout(responses);
+    stowQuestionnaire();
     reflectionWrap.hidden = false;
     saveZone.hidden = false;
     readoutBtn.hidden = true;
@@ -115,6 +118,42 @@ export function mountInstrument(definition, opts = {}) {
     timestamp: currentTimestamp || new Date().toISOString(),
     normGroup: currentNormGroup,
   });
+
+  /**
+   * Once the read-out exists, the questionnaire is no longer the page — it is
+   * reference material. Fold it (and the progress meter, and the teaching cards
+   * that set the test up) into one collapsed disclosure below the result, so the
+   * result is what is on screen. Answers stay live: reopening and changing one
+   * re-scores immediately.
+   */
+  function stowQuestionnaire() {
+    if (answersWrap) return;
+    const progress = engine.el.querySelector('.pi-progress');
+    if (progress) progress.hidden = true;
+    for (const pager of engine.el.querySelectorAll('.pi-pager')) pager.hidden = true;
+    for (const controller of pageControllers) controller.showAll();
+
+    const hero = engine.el.querySelector('.pi-instrument__hero');
+    if (hero) root.insertBefore(hero, root.firstChild);
+
+    const itemCount = engine.el.querySelectorAll('.pi-item').length;
+    answersWrap = el('details', { class: 'pi-answers' });
+    answersWrap.appendChild(el('summary', {
+      text: itemCount ? `Your answers · ${itemCount} questions — open to review or change one` : 'Your answers — open to review or change',
+    }));
+    root.appendChild(answersWrap);
+    answersWrap.appendChild(formWrap);
+    // A changed answer must move the result, not just the form.
+    answersWrap.addEventListener('change', () => {
+      if (!completed) return;
+      const { missing } = engine.collect();
+      if (missing.length) return;
+      currentTimestamp = new Date().toISOString();
+      paintReadout(engine.collect().responses);
+      persistCurrent();
+      mountMotion(doc);
+    });
+  }
 
   /**
    * Score, teach, and (for normed instruments) let the student swap the
@@ -166,6 +205,21 @@ export function mountInstrument(definition, opts = {}) {
     } catch (err) {
       saveStatus.textContent = `Could not copy: ${err.message}`;
     }
+  });
+
+  printBtn.addEventListener('click', () => { doc.defaultView.print(); });
+
+  /* A closed <details> is hidden by the browser itself, not by our CSS, so print
+     styles cannot reveal it. Open them all for the print, then put back exactly
+     the ones that were closed — the teaching copy is the reason to print at all. */
+  let reclose = [];
+  addEventListener('beforeprint', () => {
+    reclose = [...readoutEl.querySelectorAll('details:not([open])')];
+    for (const d of reclose) d.open = true;
+  });
+  addEventListener('afterprint', () => {
+    for (const d of reclose) d.open = false;
+    reclose = [];
   });
 
   restartBtn.addEventListener('click', () => {
@@ -272,6 +326,9 @@ export function mountInstrument(definition, opts = {}) {
         items,
         showPage,
         pageOf: (item) => pages.findIndex((group) => group.includes(item)),
+        // After the read-out the pager is gone, so every item has to be visible
+        // at once for review.
+        showAll: () => { for (const item of items) item.hidden = false; },
       });
 
       back.addEventListener('click', () => showPage(page - 1, true));

@@ -675,6 +675,8 @@ fieldset.pi-item legend::before {
   width: 4px;
   content: "";
   background: var(--pi-accent);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 /* Seven-band diverging scale: low end cool, middle warm, high end green.
@@ -692,16 +694,119 @@ fieldset.pi-item legend::before {
 
 .pi-readout__scale-head {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: .6rem;
+  gap: .8rem;
+  margin-bottom: .7rem;
 }
 
-.pi-readout__scale-head h3 { min-width: 0; margin-bottom: .35rem; overflow-wrap: anywhere; }
+.pi-readout__scale-id { min-width: 0; }
+.pi-readout__scale-head h3 { min-width: 0; margin: 0; overflow-wrap: anywhere; }
 
-/* Compact facet cards already sit under a "The six facets of X" heading, so the
+/* Compact facet cards already sit under a "6 facets of X" heading, so the
    per-card level tag is redundant — and long facet names push it out of the card. */
 .pi-readout__scale--compact .pi-level-tag { display: none; }
+
+/* ---- Level weighting: a facet must not look like a domain ---- */
+
+.pi-readout__scale--full { padding: 1.6rem 1.7rem; border-width: 2px; }
+.pi-readout__scale--full::before { width: 8px; }
+.pi-readout__scale--full h3 { font-size: 2.1rem; }
+
+.pi-readout__scale--medium { padding: 1.15rem 1.25rem; }
+.pi-readout__scale--medium::before { width: 6px; }
+.pi-readout__scale--medium h3 { font-size: 1.35rem; }
+
+.pi-readout__scale--compact { padding: .9rem 1rem; background: rgba(255, 253, 248, .7); }
+.pi-readout__scale--compact::before { width: 5px; }
+.pi-readout__scale--compact h3 { font-size: 1.08rem; }
+.pi-readout__scale--compact .pi-readout__row { font-size: .84rem; }
+
+.pi-readout__scale[data-level="domain"] { background: var(--pi-paper); }
+
+/* The percentile, loud enough to scan a 47-scale profile by. */
+.pi-scale-score {
+  flex: none;
+  min-width: 3.4rem;
+  text-align: right;
+  line-height: 1;
+}
+
+.pi-scale-score__num {
+  display: block;
+  color: var(--pi-accent);
+  font: 700 2.1rem/1 var(--pi-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.pi-scale-score__sub {
+  display: block;
+  margin-top: .15rem;
+  color: var(--pi-faint);
+  font-size: .58rem;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.pi-readout__scale--full .pi-scale-score__num { font-size: 3rem; }
+.pi-readout__scale--compact .pi-scale-score__num { font-size: 1.6rem; }
+
+/* ---- Band chip, coloured by band ---- */
+
+.pi-band-chip {
+  display: inline-block;
+  margin-right: .45rem;
+  padding: .22rem .6rem;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .03em;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+.pi-band-chip--very-low { background: #cadce6; color: #27485a; }
+.pi-band-chip--low { background: #dce9ef; color: #3d667d; }
+.pi-band-chip--slightly-low { background: #eaf1f5; color: #4d7286; }
+.pi-band-chip--mid { background: #f5e9c6; color: #6d5518; }
+.pi-band-chip--slightly-high { background: #e6f0ea; color: #33705a; }
+.pi-band-chip--high { background: #d5e8dd; color: #27664c; }
+.pi-band-chip--very-high { background: #bcdcca; color: #17513a; }
+
+.pi-readout__range { color: var(--pi-faint); font-size: .78rem; }
+
+/* ---- Nesting rail: sub-levels are visibly inside their domain ---- */
+
+.pi-children {
+  margin: 1rem 0 0 .6rem;
+  padding: .2rem 0 .4rem 1.4rem;
+  border-left: 3px solid var(--pi-border-strong);
+}
+
+.pi-children__label {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  margin: 1.1rem 0 .6rem -2.35rem;
+  padding-left: .35rem;
+  color: var(--pi-muted);
+  font: 700 .74rem/1 var(--pi-sans);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.pi-children__count {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--pi-border-strong);
+  color: var(--pi-paper);
+  font-size: .74rem;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
 
 .pi-level-tag {
   flex: none;
@@ -722,13 +827,13 @@ fieldset.pi-item legend::before {
   font-size: .82rem;
 }
 
+/* Shape only — the fill comes from the per-band .pi-band-chip--* classes, which
+   must not be out-specified by a descendant selector. */
 .pi-readout__band strong {
   display: inline-block;
   margin-right: .3rem;
   padding: .2rem .55rem;
   border-radius: 999px;
-  background: var(--pi-accent-soft);
-  color: var(--pi-accent);
   font-size: .72rem;
   font-weight: 800;
   letter-spacing: .03em;
@@ -751,42 +856,90 @@ fieldset.pi-item legend::before {
 .pi-spectrum__poles span { max-width: 46%; }
 .pi-spectrum__poles span:last-child { text-align: right; }
 
+/* print-color-adjust throughout: these pages get exported to PDF, and a bar
+   whose fill the print engine drops is worse than no bar at all. */
 .pi-spectrum__track {
   position: relative;
-  height: 12px;
+  height: 16px;
+  border: 1px solid var(--pi-border-strong);
   border-radius: 999px;
   background: linear-gradient(90deg, #cfdde5 0%, #ece3cd 50%, #ccdfd4 100%);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
-.pi-spectrum__mid {
+.pi-spectrum__tick {
   position: absolute;
-  top: -3px;
-  bottom: -3px;
-  left: 50%;
+  top: 2px;
+  bottom: 2px;
   width: 1px;
-  background: rgba(23, 33, 29, .28);
+  background: rgba(23, 33, 29, .2);
+}
+
+.pi-spectrum__tick--mid {
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(23, 33, 29, .42);
 }
 
 .pi-spectrum__range {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: 1px;
+  bottom: 1px;
   border-radius: 999px;
-  background: rgba(24, 92, 75, .22);
+  background: rgba(24, 92, 75, .28);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 
 .pi-spectrum__marker {
   position: absolute;
   top: 50%;
-  width: 14px;
-  height: 14px;
-  margin-left: -7px;
-  border: 2px solid var(--pi-paper);
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  border: 3px solid var(--pi-paper);
   border-radius: 50%;
-  background: var(--pi-accent);
-  box-shadow: 0 1px 5px rgba(31, 45, 39, .35);
+  background: var(--pi-ink);
+  box-shadow: 0 1px 5px rgba(31, 45, 39, .45);
   transform: translateY(-50%);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
+
+.pi-spectrum__marker--very-low { background: #2f5568; }
+.pi-spectrum__marker--low { background: #4a7690; }
+.pi-spectrum__marker--slightly-low { background: #7097ae; }
+.pi-spectrum__marker--mid { background: #b8912f; }
+.pi-spectrum__marker--slightly-high { background: #4b9474; }
+.pi-spectrum__marker--high { background: #35805f; }
+.pi-spectrum__marker--very-high { background: #1e5a42; }
+
+.pi-readout__scale--full .pi-spectrum__track { height: 22px; }
+.pi-readout__scale--full .pi-spectrum__marker { width: 24px; height: 24px; margin-left: -12px; }
+.pi-readout__scale--compact .pi-spectrum__track { height: 13px; }
+.pi-readout__scale--compact .pi-spectrum__marker { width: 15px; height: 15px; margin-left: -7.5px; border-width: 2px; }
+
+/* The stowed questionnaire: one line unless the student wants it back. */
+.pi-answers {
+  margin: 2rem 0 0;
+  border: 1px solid var(--pi-border);
+  border-radius: var(--pi-radius-sm);
+  background: rgba(255, 253, 248, .6);
+}
+
+.pi-answers > summary {
+  padding: 1rem 1.15rem;
+  color: var(--pi-muted);
+  cursor: pointer;
+  font-size: .88rem;
+  font-weight: 700;
+}
+
+.pi-answers[open] > summary { border-bottom: 1px solid var(--pi-border); }
+.pi-answers .pi-instrument { padding-top: .5rem; }
 
 .pi-readout__more {
   margin-top: .7rem;
@@ -894,7 +1047,15 @@ fieldset.pi-item legend::before {
 .pi-sublevel__intro { margin: 0 0 .8rem; color: var(--pi-muted); font-size: .88rem; }
 
 .pi-readout__grid--single { grid-template-columns: minmax(0, 1fr); }
-.pi-readout__grid--compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pi-readout__grid--compact { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .7rem; }
+
+.pi-sublevel--major {
+  margin-top: 2.2rem;
+  padding-top: 1.1rem;
+  border-top: 2px solid var(--pi-border-strong);
+  color: var(--pi-ink);
+  font-size: .84rem;
+}
 
 .pi-spread-note {
   margin: .7rem 0 0;
@@ -1914,6 +2075,11 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .pi-info-grid, .pi-readout__grid { grid-template-columns: 1fr; }
   .pi-readout__grid--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pi-spectrum__poles { font-size: .66rem; }
+  .pi-children { margin-left: 0; padding-left: .8rem; }
+  .pi-children__label { margin-left: -1.1rem; }
+  .pi-readout__scale--full { padding: 1.15rem 1.2rem; }
+  .pi-readout__scale--full h3 { font-size: 1.6rem; }
+  .pi-readout__scale--full .pi-scale-score__num { font-size: 2.2rem; }
   .pi-choices { gap: .25rem; }
   .pi-choice label { min-height: 4rem; padding: .4rem .15rem; font-size: .68rem; }
   fieldset.pi-item { padding: .95rem .65rem .75rem; }
@@ -2006,4 +2172,59 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
 .pi-motion-paused *, .pi-motion-paused *::before, .pi-motion-paused *::after {
   animation-play-state: paused !important;
+}
+
+
+/* ---------------------------------------------------------------------------
+   Print / PDF export.
+   Students and teachers export the read-out to PDF, so it has to survive the
+   print engine: keep the fills (a spectrum bar without its fill is useless),
+   drop the interactive furniture, and stop cards splitting across pages.
+   --------------------------------------------------------------------------- */
+
+@media print {
+  @page { margin: 14mm 12mm; }
+
+  html, body {
+    background: #fff !important;
+    color: #000;
+    font-size: 10.5pt;
+  }
+
+  body::before, .pi-ambient, .pi-sitebar, .pi-progress, .pi-pager,
+  .pi-save-panel, .pi-result-actions, .pi-completion-toast, .pi-answers,
+  .pi-normbar__hint, .pi-instrument__hero .pi-meta {
+    display: none !important;
+  }
+
+  /* Keep the comparison group visible as text — a percentile without its
+     reference group is meaningless on paper too. */
+  .pi-normbar { border: 0; padding: 0; background: none; }
+  .pi-normbar__btn { display: none; }
+  .pi-normbar__btn.is-current {
+    display: inline-block;
+    border-color: #000;
+    background: none !important;
+    color: #000 !important;
+    font-weight: 700;
+  }
+
+  .pi-readout__scale, .pi-profile, .pi-spread-note, .pi-domain-block > .pi-readout__grid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none;
+  }
+
+  .pi-domain-block { break-before: page; page-break-before: always; }
+  .pi-domain-block:first-of-type { break-before: auto; page-break-before: auto; }
+
+  .pi-readout__scale { border-color: #b5b5ad; background: #fff !important; }
+  .pi-readout__grid--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* Disclosures are forced open by JS on beforeprint (a closed <details> is
+     hidden by the browser, not by these styles); hide the now-pointless
+     summary rows so the printed page reads as continuous prose. */
+  .pi-readout__more > summary, .pi-readout__details > summary { display: none; }
+
+  a[href]::after { content: ""; }
 }
