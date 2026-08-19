@@ -677,21 +677,242 @@ fieldset.pi-item legend::before {
   background: var(--pi-accent);
 }
 
+/* Seven-band diverging scale: low end cool, middle warm, high end green.
+   Distance from the middle is salience, never quality. */
+.pi-readout__scale[data-band="very-low"]::before { background: #4a7690; }
 .pi-readout__scale[data-band="low"]::before { background: #7097ae; }
+.pi-readout__scale[data-band="slightly-low"]::before { background: #a3bccb; }
+.pi-readout__scale[data-band="mid"]::before,
 .pi-readout__scale[data-band="balanced"]::before { background: #d4a845; }
+.pi-readout__scale[data-band="slightly-high"]::before { background: #86b39a; }
 .pi-readout__scale[data-band="high"]::before { background: #4b9474; }
+.pi-readout__scale[data-band="very-high"]::before { background: #2f7355; }
+
 .pi-readout__scale h3 { margin: 0 0 .55rem; font: 600 1.45rem/1.2 var(--pi-display); }
 
+.pi-readout__scale-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .6rem;
+}
+
+.pi-readout__scale-head h3 { min-width: 0; margin-bottom: .35rem; overflow-wrap: anywhere; }
+
+/* Compact facet cards already sit under a "The six facets of X" heading, so the
+   per-card level tag is redundant — and long facet names push it out of the card. */
+.pi-readout__scale--compact .pi-level-tag { display: none; }
+
+.pi-level-tag {
+  flex: none;
+  padding: .16rem .5rem;
+  border: 1px solid var(--pi-border-strong);
+  border-radius: 999px;
+  color: var(--pi-faint);
+  font-size: .64rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
 .pi-readout__band {
-  display: inline-flex;
+  display: block;
   margin: 0 0 .8rem;
-  padding: .28rem .6rem;
+  color: var(--pi-muted);
+  font-size: .82rem;
+}
+
+.pi-readout__band strong {
+  display: inline-block;
+  margin-right: .3rem;
+  padding: .2rem .55rem;
   border-radius: 999px;
   background: var(--pi-accent-soft);
   color: var(--pi-accent);
-  font-size: .75rem;
+  font-size: .72rem;
   font-weight: 800;
-  text-transform: capitalize;
+  letter-spacing: .03em;
+}
+
+/* ---- Spectrum bar: the whole scale, with this result placed on it ---- */
+
+.pi-spectrum { margin: 0 0 .75rem; }
+
+.pi-spectrum__poles {
+  display: flex;
+  justify-content: space-between;
+  gap: .6rem;
+  margin-bottom: .3rem;
+  color: var(--pi-faint);
+  font-size: .7rem;
+  line-height: 1.25;
+}
+
+.pi-spectrum__poles span { max-width: 46%; }
+.pi-spectrum__poles span:last-child { text-align: right; }
+
+.pi-spectrum__track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #cfdde5 0%, #ece3cd 50%, #ccdfd4 100%);
+}
+
+.pi-spectrum__mid {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  left: 50%;
+  width: 1px;
+  background: rgba(23, 33, 29, .28);
+}
+
+.pi-spectrum__range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: rgba(24, 92, 75, .22);
+}
+
+.pi-spectrum__marker {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border: 2px solid var(--pi-paper);
+  border-radius: 50%;
+  background: var(--pi-accent);
+  box-shadow: 0 1px 5px rgba(31, 45, 39, .35);
+  transform: translateY(-50%);
+}
+
+.pi-readout__more {
+  margin-top: .7rem;
+  border-top: 1px solid #e6e4dd;
+}
+
+.pi-readout__more summary {
+  padding-top: .6rem;
+  color: var(--pi-accent);
+  cursor: pointer;
+  font-size: .78rem;
+  font-weight: 750;
+}
+
+/* ---- Comparison-group picker ---- */
+
+.pi-normbar {
+  margin-bottom: 1.1rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--pi-border);
+  border-radius: var(--pi-radius-sm);
+  background: rgba(255, 253, 248, .75);
+}
+
+.pi-normbar__label {
+  margin: 0 0 .5rem;
+  color: var(--pi-ink);
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.pi-normbar__options { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+.pi-normbar__btn {
+  padding: .4rem .8rem;
+  border: 1px solid var(--pi-border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--pi-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: .82rem;
+}
+
+.pi-normbar__btn.is-current {
+  border-color: var(--pi-accent);
+  background: var(--pi-accent);
+  color: var(--pi-accent-fg);
+}
+
+.pi-normbar__hint { margin: .6rem 0 0; color: var(--pi-faint); font-size: .78rem; }
+
+/* ---- Profile summary ---- */
+
+.pi-profile {
+  margin-bottom: 1.4rem;
+  padding: 1.35rem;
+  border: 1px solid var(--pi-border);
+  border-radius: var(--pi-radius);
+  background: var(--pi-card);
+  box-shadow: var(--pi-shadow-sm);
+}
+
+.pi-profile h3 { margin: 0 0 .9rem; font: 600 1.5rem/1.15 var(--pi-display); }
+
+.pi-profile__tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: .7rem;
+}
+
+.pi-profile__tile {
+  padding: .8rem .9rem;
+  border-radius: var(--pi-radius-sm);
+  background: var(--pi-accent-soft);
+}
+
+.pi-profile__value {
+  display: block;
+  color: var(--pi-accent);
+  font: 700 1.35rem/1.1 var(--pi-display);
+}
+
+.pi-profile__label { display: block; margin-top: .2rem; color: #4f5b55; font-size: .76rem; }
+.pi-profile__note { margin: 1rem 0 .4rem; color: var(--pi-muted); font-size: .85rem; }
+
+.pi-profile__list { margin: 0; padding-left: 1.2rem; color: #4f5b55; font-size: .9rem; }
+.pi-profile__list li { margin-bottom: .25rem; }
+.pi-profile__list strong { color: var(--pi-ink); }
+
+/* ---- Hierarchy blocks ---- */
+
+.pi-domain-block { margin-bottom: 1.8rem; }
+
+.pi-sublevel {
+  margin: 1.1rem 0 .5rem;
+  color: var(--pi-muted);
+  font: 700 .74rem/1.3 var(--pi-sans);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.pi-sublevel__intro { margin: 0 0 .8rem; color: var(--pi-muted); font-size: .88rem; }
+
+.pi-readout__grid--single { grid-template-columns: minmax(0, 1fr); }
+.pi-readout__grid--compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.pi-spread-note {
+  margin: .7rem 0 0;
+  padding: .8rem 1rem;
+  border-left: 3px solid var(--pi-accent-2);
+  border-radius: 0 var(--pi-radius-sm) var(--pi-radius-sm) 0;
+  background: rgba(214, 106, 61, .07);
+  color: #4f5b55;
+  font-size: .88rem;
+}
+
+.pi-readout__caveat {
+  margin: 1.5rem 0 0;
+  padding: 1rem 1.15rem;
+  border: 1px dashed var(--pi-border-strong);
+  border-radius: var(--pi-radius-sm);
+  color: var(--pi-faint);
+  font-size: .8rem;
 }
 
 .pi-readout__row {
@@ -1009,8 +1230,12 @@ fieldset.pi-item legend::before {
 .pi-trajectory__name span { display: block; color: var(--pi-faint); font-size: .72rem; }
 .pi-band { min-width: 4.8rem; padding: .28rem .55rem; border-radius: 999px; font-size: .7rem; font-weight: 800; text-align: center; text-transform: capitalize; }
 .pi-band--low { background: #dce9ef; color: #3d667d; }
-.pi-band--balanced { background: #f5e9c6; color: #775d20; }
+.pi-band--balanced, .pi-band--mid { background: #f5e9c6; color: #775d20; }
 .pi-band--high { background: #dcece4; color: #27664c; }
+.pi-band--very-low { background: #cadcE6; color: #2f5568; }
+.pi-band--slightly-low { background: #e7eff3; color: #4d7286; }
+.pi-band--slightly-high { background: #e6f0ea; color: #33705a; }
+.pi-band--very-high { background: #cfe4d9; color: #1e5a42; }
 .pi-band--unknown { background: #e8e7e2; color: var(--pi-muted); }
 .pi-band--theta { min-width: 7.5rem; background: #dcece8; color: #165e50; text-transform: none; }
 .pi-delta { min-width: 2.2rem; color: var(--pi-accent); font-size: .75rem; font-weight: 800; text-align: right; }
@@ -1687,6 +1912,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .pi-landing-hero { min-height: 30rem; padding: 2rem 1.35rem; }
   .pi-landing-hero__spark { top: 1.4rem; right: 1.4rem; }
   .pi-info-grid, .pi-readout__grid { grid-template-columns: 1fr; }
+  .pi-readout__grid--compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pi-spectrum__poles { font-size: .66rem; }
   .pi-choices { gap: .25rem; }
   .pi-choice label { min-height: 4rem; padding: .4rem .15rem; font-size: .68rem; }
   fieldset.pi-item { padding: .95rem .65rem .75rem; }

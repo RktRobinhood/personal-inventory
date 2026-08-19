@@ -17,6 +17,7 @@ export function mountInstrument(definition, opts = {}) {
   const engine = createEngine(definition, ctx, { scoresOnly: opts.scoresOnly === true });
   const pageControllers = [];
   let currentTimestamp = '';
+  let currentNormGroup = engine.defaultNormGroup;
   let completed = false;
   let dirty = false;
   let library = loadLibrary();
@@ -98,8 +99,7 @@ export function mountInstrument(definition, opts = {}) {
     }
     formStatus.textContent = '';
     currentTimestamp = new Date().toISOString();
-    const { bands } = engine.score(responses);
-    readoutEl.replaceChildren(engine.renderReadout(engine.buildReadout(bands)));
+    paintReadout(responses);
     reflectionWrap.hidden = false;
     saveZone.hidden = false;
     readoutBtn.hidden = true;
@@ -113,7 +113,28 @@ export function mountInstrument(definition, opts = {}) {
 
   const buildFresh = () => engine.buildRecord({
     timestamp: currentTimestamp || new Date().toISOString(),
+    normGroup: currentNormGroup,
   });
+
+  /**
+   * Score, teach, and (for normed instruments) let the student swap the
+   * comparison group. Changing the group re-scores from the same answers — the
+   * responses never move, only the population they are read against.
+   */
+  function paintReadout(responses) {
+    const scored = engine.score(responses, { normGroup: currentNormGroup });
+    currentNormGroup = scored.normGroup || currentNormGroup;
+    const readout = engine.buildReadout(scored.bands, scored.details);
+    readoutEl.replaceChildren(engine.renderReadout(readout, {
+      normGroup: currentNormGroup,
+      onSelectNormGroup: (id) => {
+        currentNormGroup = id;
+        paintReadout(engine.collect().responses);
+        persistCurrent();
+        mountMotion(doc);
+      },
+    }));
+  }
 
   reflectionWrap.addEventListener('input', () => {
     if (!completed) return;

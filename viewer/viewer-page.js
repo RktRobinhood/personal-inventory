@@ -15,6 +15,9 @@ const INSTRUMENT_ORDER = Object.keys(INSTRUMENT_NAMES);
 const INSTRUMENT_PATHS = Object.fromEntries(
   INSTRUMENT_ORDER.map((id) => [id, `../instruments/${id}.html`]),
 );
+/* Where each band id plots on the 0-100 track. The three-band vocabulary sits at
+   the thirds; the seven-band norm-referenced vocabulary sits at the midpoint of
+   its percentile interval. */
 const BAND_POSITION = {
   low: 16.667,
   'building-range': 16.667,
@@ -22,6 +25,11 @@ const BAND_POSITION = {
   'middle-range': 50,
   high: 83.333,
   'higher-range': 83.333,
+  'very-low': 5,
+  'slightly-low': 32.5,
+  mid: 50,
+  'slightly-high': 67.5,
+  'very-high': 95,
 };
 
 export function mountPortraitViewer(ctx = {}) {

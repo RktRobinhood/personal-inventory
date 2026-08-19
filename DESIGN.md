@@ -51,7 +51,11 @@ Each touchpoint is a *configuration* of modules: some one-time (Big Five, VIA), 
 | **Growth Mindset** | The movable change-meter | **Recurrent / bookend** | Tiny, designed to shift — carries the "see how you changed" number. |
 | **Grit, Self-Efficacy** | Additional lenses | Distributed across CAS/TOK touchpoints | Watch for redundancy/fatigue. |
 
-**Big Five output is rebuilt from "scored profile" into "self-design handles":** bands (low/balanced/high), **not** percentile points (honest about the instrument's real resolution and adult/English norms vs Danish teens); each facet ships as *tendency → when it helps → when it hurts → one thing to try*; timestamped ("In August of DP1, I tended toward…"); student-owned; delivered by a human, not a bare printout.
+**Big Five output is rebuilt from "scored profile" into "self-design handles":** each scale ships as *tendency → when it helps → when it hurts → one thing to try*; timestamped ("In August of DP1, I tended toward…"); student-owned; delivered by a human, not a bare printout.
+
+> **Superseded (v2.0.0, August 2026) — the band decision.** The original rule was three criterion-referenced bands (low/balanced/high), *not* percentiles, on the grounds that the instrument's real resolution is coarse and its norms are adult and English. First classroom run showed the cost: because the average person answers well above the midpoint of a Likert scale, criterion-referenced thirds put nearly every student in "balanced" on nearly every scale, so the read-out was uninformative — and a mid-range *domain* score is almost never a mid-range set of *facets*, which the old output could not show at all.
+>
+> v2.0.0 therefore reports **norm-referenced percentiles across the published hierarchy** — 2 metatraits, 5 domains, 10 aspects, 30 facets — against Johnson's under-21 norms, in seven bands rather than three. The original honesty concern is met in a better way than by throwing resolution away: every score carries a **±1 SEM uncertainty range**, the **comparison group is named and switchable** on the results page, and the read-out says which numbers (single-facet aspects, the derived metatraits) are the least certain. Derivations, assumptions and limitations are documented in `content-sources/bigfive.md` Part 2.
 
 ---
 

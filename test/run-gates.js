@@ -336,6 +336,95 @@ await gate('page:sync', () => {
   return { detail: `${checked} page(s) in sync with their definition` };
 });
 
+/* 8b. norm + hierarchy integrity — the arithmetic behind every reported percentile.
+   Percentiles are only defensible if the norm table is internally consistent and
+   every composite is exactly the sum of its parts, so this is checked, not trusted. */
+await gate('norms:hierarchy', () => {
+  const files = listJSON(p('definitions'));
+  let checkedScales = 0;
+  let normed = 0;
+  for (const f of files) {
+    const def = readJSON(p('definitions', f));
+    for (const section of def.sections) {
+      if (section.type !== 'scored-likert' || !section.norms) continue;
+      normed++;
+      const { bands, cuts, mode, copy_poles: poles } = section.band_thresholds;
+      if (mode !== 'norm-referenced') fail(`${f}: carries norms but band mode is "${mode}"`);
+      if (cuts.length !== bands.length - 1) fail(`${f}: ${cuts.length} cuts for ${bands.length} bands`);
+      if (!cuts.every((c, i) => i === 0 || c > cuts[i - 1])) fail(`${f}: band cuts are not strictly ascending`);
+
+      const byId = Object.fromEntries(section.scales.map((s) => [s.id, s]));
+      const itemScales = new Set(section.items.map((it) => it.scale));
+
+      for (const scale of section.scales) {
+        // Every band must resolve to authored copy, via copy_poles where present.
+        for (const band of bands) {
+          const pole = poles ? poles[band] : band;
+          if (!pole) fail(`${f}/${scale.id}: band "${band}" has no copy pole`);
+          const copy = scale.bands[pole];
+          if (!copy || !copy.light || !copy.shadow || !copy.one_thing_to_try) {
+            fail(`${f}/${scale.id}: missing copy for pole "${pole}"`);
+          }
+        }
+        if (!scale.spectrum?.low_end || !scale.spectrum?.high_end) fail(`${f}/${scale.id}: missing spectrum poles`);
+        // Facets own items; everything above facet level is defined by members.
+        if (scale.level === 'facet') {
+          if (!itemScales.has(scale.id)) fail(`${f}/${scale.id}: declared a facet but owns no items`);
+        } else {
+          if (!scale.members?.length) fail(`${f}/${scale.id}: level "${scale.level}" with no members`);
+          for (const m of scale.members) {
+            if (!byId[m.scale]) fail(`${f}/${scale.id}: member "${m.scale}" is not a declared scale`);
+          }
+        }
+        // An aspect's marker loadings must satisfy the published membership rule.
+        if (scale.level === 'aspect') {
+          const marks = scale.marker_loadings || {};
+          for (const m of scale.members) {
+            const loading = marks[m.scale];
+            if (!(loading >= 0.5)) fail(`${f}/${scale.id}: member ${m.scale} has loading ${loading} (< .50)`);
+          }
+        }
+        checkedScales++;
+      }
+
+      for (const group of section.norms.groups) {
+        for (const scale of section.scales) {
+          const norm = group.scales[scale.id];
+          if (!norm) fail(`${f}/${group.id}: no norms for scale "${scale.id}"`);
+          if (!(norm.sd > 0)) fail(`${f}/${group.id}/${scale.id}: sd ${norm.sd} is not positive`);
+          if (!(norm.reliability > 0 && norm.reliability <= 1)) {
+            fail(`${f}/${group.id}/${scale.id}: reliability ${norm.reliability} out of (0,1]`);
+          }
+          // Derived composite means are exact sums of their members' means.
+          // Domains are excluded: their mean is PUBLISHED, so it differs from the
+          // sum of the published facet means by the source table's own rounding
+          // (checked separately, and loosely, below).
+          if (scale.members?.length && scale.level !== 'domain') {
+            const expected = scale.members.reduce((t, m) => t + m.sign * group.scales[m.scale].mean, 0);
+            if (Math.abs(expected - norm.mean) > 0.011) {
+              fail(`${f}/${group.id}/${scale.id}: mean ${norm.mean} != sum of members ${expected.toFixed(3)}`);
+            }
+          }
+        }
+        // Published domain means and the published facet means must agree — the
+        // independent check that the table and the 1-5 -> 0-4 shift are sound.
+        for (const scale of section.scales.filter((s) => s.level === 'domain')) {
+          const facets = section.scales.filter((s) => s.parent === scale.id && s.level === 'facet');
+          const sum = facets.reduce((t, s) => t + group.scales[s.id].mean, 0);
+          if (Math.abs(sum - group.scales[scale.id].mean) > 0.6) {
+            fail(`${f}/${group.id}/${scale.id}: facet means sum to ${sum.toFixed(2)}, domain mean is ${group.scales[scale.id].mean}`);
+          }
+        }
+        if (!section.norms.groups.some((g) => g.id === section.norms.default_group)) {
+          fail(`${f}: default_group "${section.norms.default_group}" is not one of the groups`);
+        }
+      }
+    }
+  }
+  if (normed === 0) return { skip: true, detail: 'no norm-referenced sections yet' };
+  return { detail: `${checkedScales} scale(s) across ${normed} norm-referenced section(s): members, copy poles, and norm arithmetic consistent` };
+});
+
 /* 9. viewer aggregation — the viewer aggregates the test record folder correctly */
 await gate('viewer:aggregate', async () => {
   if (!existsSync(p('viewer', 'viewer.js'))) return { skip: true, detail: 'viewer not built yet' };

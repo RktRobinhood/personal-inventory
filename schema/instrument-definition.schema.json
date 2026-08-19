@@ -5,7 +5,15 @@
   "description": "An instrument is DATA, not code (BUILD.md Operating Rule 2). This contract defines a single instrument: provenance fields plus an ordered list of sections. The engine renders any definition that validates here. Scored sections carry their own scales, criterion-referenced band thresholds, a neutral construct_explainer, and tendency-language band copy. Aspirational section types carry no scoring.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "version", "title", "source", "citation", "license", "sections"],
+  "required": [
+    "id",
+    "version",
+    "title",
+    "source",
+    "citation",
+    "license",
+    "sections"
+  ],
   "properties": {
     "id": {
       "type": "string",
@@ -45,33 +53,58 @@
       "type": "array",
       "minItems": 1,
       "description": "Ordered sections. Rendered top to bottom in a single sitting.",
-      "items": { "$ref": "#/$defs/section" }
+      "items": {
+        "$ref": "#/$defs/section"
+      }
     }
   },
   "$defs": {
     "section": {
       "description": "One of the five fixed section types, discriminated by `type`.",
       "type": "object",
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "oneOf": [
-        { "$ref": "#/$defs/infoSection" },
-        { "$ref": "#/$defs/scoredLikertSection" },
-        { "$ref": "#/$defs/scoredMatrixSection" },
-        { "$ref": "#/$defs/selfRatingSection" },
-        { "$ref": "#/$defs/selectAndCommitSection" },
-        { "$ref": "#/$defs/freeReflectionSection" }
+        {
+          "$ref": "#/$defs/infoSection"
+        },
+        {
+          "$ref": "#/$defs/scoredLikertSection"
+        },
+        {
+          "$ref": "#/$defs/scoredMatrixSection"
+        },
+        {
+          "$ref": "#/$defs/selfRatingSection"
+        },
+        {
+          "$ref": "#/$defs/selectAndCommitSection"
+        },
+        {
+          "$ref": "#/$defs/freeReflectionSection"
+        }
       ]
     },
-
     "infoSection": {
       "description": "A teaching / framing block. No scoring, no input.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id", "body"],
+      "required": [
+        "type",
+        "id",
+        "body"
+      ],
       "properties": {
-        "type": { "const": "info" },
-        "id": { "$ref": "#/$defs/sectionId" },
-        "title": { "type": "string" },
+        "type": {
+          "const": "info"
+        },
+        "id": {
+          "$ref": "#/$defs/sectionId"
+        },
+        "title": {
+          "type": "string"
+        },
         "body": {
           "type": "string",
           "minLength": 1,
@@ -79,40 +112,84 @@
         }
       }
     },
-
     "scoredLikertSection": {
-      "description": "Psychometric Likert section. Items load onto scales; scales sum (with reverse-keying) and map to criterion-referenced bands. Each scale ships a neutral construct_explainer plus per-band light/shadow/one_thing_to_try copy in tendency language.",
+      "description": "Psychometric Likert section. Items load onto scales; scales sum (with reverse-keying) and map to bands. Bands are criterion-referenced by default; a section carrying `norms` and band_thresholds.mode = \"norm-referenced\" is scored against published norms instead, and its cuts are percentile fractions. Each scale ships a neutral construct_explainer plus per-band light/shadow/one_thing_to_try copy in tendency language.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id", "anchors", "band_thresholds", "items", "scales"],
+      "required": [
+        "type",
+        "id",
+        "anchors",
+        "band_thresholds",
+        "items",
+        "scales"
+      ],
       "properties": {
-        "type": { "const": "scored-likert" },
-        "id": { "$ref": "#/$defs/sectionId" },
-        "title": { "type": "string" },
-        "intro": { "type": "string", "description": "Optional teaching copy before the items." },
+        "type": {
+          "const": "scored-likert"
+        },
+        "id": {
+          "$ref": "#/$defs/sectionId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "intro": {
+          "type": "string",
+          "description": "Optional teaching copy before the items."
+        },
         "anchors": {
           "type": "array",
           "minItems": 2,
           "description": "Likert response labels in ascending order, e.g. [\"Very inaccurate\", ... , \"Very accurate\"]. The number of anchors is the response range; an item's `points` must not exceed it.",
-          "items": { "type": "string", "minLength": 1 }
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "band_thresholds": {
-          "description": "Criterion-referenced cut points expressed as fractions (0..1) of each scale's OWN min..max range (DESIGN.md: thirds, not norm-referenced percentiles). The engine normalizes each scale's summed score into [0,1] and assigns the band whose interval contains it. `cuts` must be strictly ascending and one shorter than `bands`.",
+          "description": "Cut points expressed as fractions in (0,1), strictly ascending, one shorter than `bands`. In the default criterion-referenced mode they are fractions of each scale’s OWN min..max range. In norm-referenced mode they are percentile fractions against the section’s `norms`.",
           "type": "object",
           "additionalProperties": false,
-          "required": ["bands", "cuts"],
+          "required": [
+            "bands",
+            "cuts"
+          ],
           "properties": {
             "bands": {
               "type": "array",
               "minItems": 2,
               "description": "Ordered band ids from lowest to highest, e.g. [\"low\", \"balanced\", \"high\"]. Every scale must supply per-band copy keyed by exactly these ids.",
-              "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" }
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              }
             },
             "cuts": {
               "type": "array",
               "minItems": 1,
               "description": "Fractional boundaries in (0,1), strictly ascending. Length = bands.length - 1. Default thirds = [0.3333, 0.6667].",
-              "items": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 }
+              "items": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "exclusiveMaximum": 1
+              }
+            },
+            "mode": {
+              "enum": [
+                "criterion-referenced",
+                "norm-referenced"
+              ],
+              "default": "criterion-referenced",
+              "description": "How `cuts` are interpreted. \"norm-referenced\" requires the section to carry `norms`."
+            },
+            "copy_poles": {
+              "type": "object",
+              "description": "Optional map from each band id to the band-copy key it uses. Lets a fine-grained band set (seven bands) share a smaller set of authored copy poles (low / mid / high). When absent, band ids and copy keys are the same.",
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              }
             }
           }
         },
@@ -122,28 +199,66 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["text", "scale", "reverse", "points"],
+            "required": [
+              "text",
+              "scale",
+              "reverse",
+              "points"
+            ],
             "properties": {
-              "id": { "type": "string", "description": "Optional stable item id for fixtures/record raw_responses keys." },
-              "text": { "type": "string", "minLength": 1, "description": "Verbatim item wording transcribed from the cited source." },
-              "scale": { "type": "string", "minLength": 1, "description": "Id of the scale this item loads onto (must match a scales[].id)." },
-              "reverse": { "type": "boolean", "description": "If true, the response is reverse-keyed before summing." },
-              "points": { "type": "integer", "minimum": 2, "description": "Number of response options for this item; must be <= anchors.length." }
+              "id": {
+                "type": "string",
+                "description": "Optional stable item id for fixtures/record raw_responses keys."
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Verbatim item wording transcribed from the cited source."
+              },
+              "scale": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Id of the scale this item loads onto (must match a scales[].id)."
+              },
+              "reverse": {
+                "type": "boolean",
+                "description": "If true, the response is reverse-keyed before summing."
+              },
+              "points": {
+                "type": "integer",
+                "minimum": 2,
+                "description": "Number of response options for this item; must be <= anchors.length."
+              }
             }
           }
         },
         "scales": {
           "type": "array",
           "minItems": 1,
-          "description": "Scales/facets this section computes. A scale may declare a `parent` to roll facets up into a domain (e.g. Big Five facets -> domains).",
+          "description": "Scales this section computes, across up to four hierarchy levels. A `facet` owns items. A `domain`, `aspect`, or `metatrait` owns no items and is computed from `members`.",
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "name", "construct_explainer", "bands"],
+            "required": [
+              "id",
+              "name",
+              "construct_explainer",
+              "bands"
+            ],
             "properties": {
-              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
-              "name": { "type": "string", "minLength": 1, "description": "Human-facing scale/facet name." },
-              "parent": { "type": "string", "description": "Optional id of a parent domain scale this facet rolls up into." },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Human-facing scale/facet name."
+              },
+              "parent": {
+                "type": "string",
+                "description": "Optional id of a parent domain scale this facet rolls up into."
+              },
               "construct_explainer": {
                 "type": "string",
                 "minLength": 1,
@@ -153,38 +268,228 @@
                 "type": "object",
                 "description": "Per-band copy, keyed by the band ids declared in band_thresholds.bands. Every declared band must be present (enforced by the engine/gates against band_thresholds).",
                 "minProperties": 2,
-                "additionalProperties": { "$ref": "#/$defs/bandCopy" }
+                "additionalProperties": {
+                  "$ref": "#/$defs/bandCopy"
+                }
+              },
+              "level": {
+                "enum": [
+                  "facet",
+                  "aspect",
+                  "domain",
+                  "metatrait"
+                ],
+                "description": "Hierarchy level. Only `facet` scales carry items; the rest are composites defined by `members`."
+              },
+              "members": {
+                "type": "array",
+                "minItems": 1,
+                "description": "Composite definition: the signed sum of these scales’ scores. Required for any scale above facet level.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "scale",
+                    "sign"
+                  ],
+                  "properties": {
+                    "scale": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Id of a member scale."
+                    },
+                    "sign": {
+                      "enum": [
+                        1,
+                        -1
+                      ],
+                      "description": "Direction the member enters the sum."
+                    }
+                  }
+                }
+              },
+              "spectrum": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "low_end",
+                  "high_end"
+                ],
+                "description": "Short labels for the two ends of this scale, shown whatever band a result lands in, so the whole spectrum is visible and not just the student’s slice of it.",
+                "properties": {
+                  "low_end": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "high_end": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "reliability": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "description": "Internal-consistency reliability for the default norm group; drives the reported uncertainty range."
+              },
+              "marker_loadings": {
+                "type": "object",
+                "description": "For aspects: the published factor loading of each member facet on this aspect, kept so the membership rule stays auditable.",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              }
+            }
+          }
+        },
+        "norms": {
+          "type": "object",
+          "description": "Published norm tables enabling norm-referenced scoring. Required when band_thresholds.mode is \"norm-referenced\".",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "default_group",
+            "groups"
+          ],
+          "properties": {
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Where the norm table comes from."
+            },
+            "note": {
+              "type": "string",
+              "description": "Any transformation applied to the published values, and which values are derived rather than published."
+            },
+            "default_group": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Id of the comparison group used unless the student picks another."
+            },
+            "groups": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "label",
+                  "scales"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^[a-z0-9][a-z0-9_-]*$"
+                  },
+                  "label": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "short": {
+                    "type": "string",
+                    "description": "Compact label for the comparison-group selector."
+                  },
+                  "facet_correlation": {
+                    "type": "object",
+                    "description": "Average within-domain facet correlation, back-solved from the published domain and facet SDs. Used to derive composite SDs.",
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  },
+                  "metatrait_correlation": {
+                    "type": "object",
+                    "description": "Assumed average domain intercorrelation within each metatrait. Stated, not published — see the instrument’s content source.",
+                    "additionalProperties": {
+                      "type": "number"
+                    }
+                  },
+                  "scales": {
+                    "type": "object",
+                    "minProperties": 1,
+                    "description": "Per-scale norm statistics, keyed by scale id.",
+                    "additionalProperties": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "mean",
+                        "sd"
+                      ],
+                      "properties": {
+                        "mean": {
+                          "type": "number",
+                          "description": "Norm-group mean of this scale’s summed score, on this app’s 0-based response metric."
+                        },
+                        "sd": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "description": "Norm-group standard deviation of this scale’s summed score."
+                        },
+                        "reliability": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "maximum": 1,
+                          "description": "Internal-consistency reliability used for the standard error of measurement."
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
         }
       }
     },
-
     "scoredMatrixSection": {
       "description": "Construction-based figural matrix reasoning section. A response selects from 20 construction elements and is correct only when it exactly matches the source solution.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id", "band_thresholds", "items", "scales"],
+      "required": [
+        "type",
+        "id",
+        "band_thresholds",
+        "items",
+        "scales"
+      ],
       "properties": {
-        "type": { "const": "scored-matrix" },
-        "id": { "$ref": "#/$defs/sectionId" },
-        "title": { "type": "string" },
-        "intro": { "type": "string" },
+        "type": {
+          "const": "scored-matrix"
+        },
+        "id": {
+          "$ref": "#/$defs/sectionId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "intro": {
+          "type": "string"
+        },
         "band_thresholds": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["bands", "cuts"],
+          "required": [
+            "bands",
+            "cuts"
+          ],
           "properties": {
             "bands": {
               "type": "array",
               "minItems": 2,
-              "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" }
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              }
             },
             "cuts": {
               "type": "array",
               "minItems": 1,
-              "items": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 }
+              "items": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "exclusiveMaximum": 1
+              }
             }
           }
         },
@@ -194,39 +499,89 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "scale", "item_code", "solution", "difficulty", "discrimination", "rules"],
+            "required": [
+              "id",
+              "scale",
+              "item_code",
+              "solution",
+              "difficulty",
+              "discrimination",
+              "rules"
+            ],
             "properties": {
-              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
-              "scale": { "type": "string", "minLength": 1 },
-              "item_code": { "type": "string", "pattern": "^[01]{20}(,[01]{20}){8}$" },
-              "solution": { "type": "string", "pattern": "^[01]{20}$" },
-              "difficulty": { "type": ["number", "null"], "description": "Published 2PL item threshold (b), or null for the one misfitting item." },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              },
+              "scale": {
+                "type": "string",
+                "minLength": 1
+              },
+              "item_code": {
+                "type": "string",
+                "pattern": "^[01]{20}(,[01]{20}){8}$"
+              },
+              "solution": {
+                "type": "string",
+                "pattern": "^[01]{20}$"
+              },
+              "difficulty": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Published 2PL item threshold (b), or null for the one misfitting item."
+              },
               "discrimination": {
                 "anyOf": [
-                  { "type": "number", "exclusiveMinimum": 0 },
-                  { "type": "null" }
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
                 ],
                 "description": "Published 2PL item discrimination (a), or null for the one misfitting item."
               },
-              "calibrated": { "type": "boolean", "description": "False excludes the item from scored random forms." },
-              "rules": { "type": "integer", "minimum": 1, "maximum": 6 }
+              "calibrated": {
+                "type": "boolean",
+                "description": "False excludes the item from scored random forms."
+              },
+              "rules": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              }
             }
           }
         },
         "form": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["length", "practice_ids", "rule_targets"],
+          "required": [
+            "length",
+            "practice_ids",
+            "rule_targets"
+          ],
           "properties": {
-            "length": { "type": "integer", "minimum": 1 },
+            "length": {
+              "type": "integer",
+              "minimum": 1
+            },
             "practice_ids": {
               "type": "array",
               "minItems": 2,
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             },
             "rule_targets": {
               "type": "object",
-              "additionalProperties": { "type": "integer", "minimum": 0 }
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
             }
           }
         },
@@ -236,88 +591,174 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "name", "construct_explainer", "bands"],
+            "required": [
+              "id",
+              "name",
+              "construct_explainer",
+              "bands"
+            ],
             "properties": {
-              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]*$" },
-              "name": { "type": "string", "minLength": 1 },
-              "construct_explainer": { "type": "string", "minLength": 1 },
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_-]*$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "construct_explainer": {
+                "type": "string",
+                "minLength": 1
+              },
               "bands": {
                 "type": "object",
                 "minProperties": 2,
-                "additionalProperties": { "$ref": "#/$defs/bandCopy" }
+                "additionalProperties": {
+                  "$ref": "#/$defs/bandCopy"
+                }
               }
             }
           }
         }
       }
     },
-
     "bandCopy": {
       "description": "Tendency-language copy for one band of one scale. 'No trait is bad': every band has a light side and a shadow, plus one concrete nudge.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["light", "shadow", "one_thing_to_try"],
+      "required": [
+        "light",
+        "shadow",
+        "one_thing_to_try"
+      ],
       "properties": {
-        "light": { "type": "string", "minLength": 1, "description": "The upside / where this tendency helps." },
-        "shadow": { "type": "string", "minLength": 1, "description": "Where this tendency can get in the way." },
-        "one_thing_to_try": { "type": "string", "minLength": 1, "description": "One concrete, optional experiment to push against it." }
+        "light": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The upside / where this tendency helps."
+        },
+        "shadow": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Where this tendency can get in the way."
+        },
+        "one_thing_to_try": {
+          "type": "string",
+          "minLength": 1,
+          "description": "One concrete, optional experiment to push against it."
+        }
       }
     },
-
     "selfRatingSection": {
       "description": "Student rates themselves on named dimensions. Aspirational/qualitative: no psychometric scales, no bands. Responses are stored verbatim in the record.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id", "items"],
+      "required": [
+        "type",
+        "id",
+        "items"
+      ],
       "properties": {
-        "type": { "const": "self-rating" },
-        "id": { "$ref": "#/$defs/sectionId" },
-        "title": { "type": "string" },
-        "intro": { "type": "string" },
+        "type": {
+          "const": "self-rating"
+        },
+        "id": {
+          "$ref": "#/$defs/sectionId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "intro": {
+          "type": "string"
+        },
         "items": {
           "type": "array",
           "minItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "text", "max"],
+            "required": [
+              "id",
+              "text",
+              "max"
+            ],
             "properties": {
-              "id": { "type": "string", "minLength": 1 },
-              "text": { "type": "string", "minLength": 1 },
-              "max": { "type": "integer", "minimum": 2, "description": "Top of the rating range (1..max)." },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "text": {
+                "type": "string",
+                "minLength": 1
+              },
+              "max": {
+                "type": "integer",
+                "minimum": 2,
+                "description": "Top of the rating range (1..max)."
+              },
               "anchors": {
                 "type": "array",
                 "description": "Optional labels for the rating range.",
-                "items": { "type": "string" }
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }
         }
       }
     },
-
     "selectAndCommitSection": {
       "description": "Student selects from offered options and commits. Used by the aspirational learner-profile module. No scoring. Options may map to an official IB attribute so each reframe stays defensible.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id", "prompt", "options"],
+      "required": [
+        "type",
+        "id",
+        "prompt",
+        "options"
+      ],
       "properties": {
-        "type": { "const": "select-and-commit" },
-        "id": { "$ref": "#/$defs/sectionId" },
-        "title": { "type": "string" },
-        "prompt": { "type": "string", "minLength": 1 },
-        "min_select": { "type": "integer", "minimum": 0 },
-        "max_select": { "type": "integer", "minimum": 1 },
+        "type": {
+          "const": "select-and-commit"
+        },
+        "id": {
+          "$ref": "#/$defs/sectionId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "min_select": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max_select": {
+          "type": "integer",
+          "minimum": 1
+        },
         "options": {
           "type": "array",
           "minItems": 1,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "label"],
+            "required": [
+              "id",
+              "label"
+            ],
             "properties": {
-              "id": { "type": "string", "minLength": 1 },
-              "label": { "type": "string", "minLength": 1 },
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1
+              },
               "ib_attribute": {
                 "type": "string",
                 "description": "Official IB learner-profile attribute this option maps back to (keeps subversive reframes defensible to colleagues/parents)."
@@ -331,25 +772,38 @@
         }
       }
     },
-
     "freeReflectionSection": {
       "description": "An open writing prompt. The student authors the meaning; their text becomes the student_snapshot stored in the record (DESIGN.md read-out model C). No machine-generated prose about the person.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id", "prompt"],
+      "required": [
+        "type",
+        "id",
+        "prompt"
+      ],
       "properties": {
-        "type": { "const": "free-reflection" },
-        "id": { "$ref": "#/$defs/sectionId" },
-        "title": { "type": "string" },
-        "prompt": { "type": "string", "minLength": 1 },
-        "placeholder": { "type": "string" },
+        "type": {
+          "const": "free-reflection"
+        },
+        "id": {
+          "$ref": "#/$defs/sectionId"
+        },
+        "title": {
+          "type": "string"
+        },
+        "prompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "placeholder": {
+          "type": "string"
+        },
         "is_snapshot": {
           "type": "boolean",
           "description": "If true, this section's text is the canonical student_snapshot for the record. At most one per instrument."
         }
       }
     },
-
     "sectionId": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9_-]*$",
